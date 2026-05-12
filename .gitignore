@@ -1,0 +1,27 @@
+# deps
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# next
+/.next/
+/out/
+
+# env files — NEVER commit .env.local (has real keys)
+.env.local
+.env.*.local
+
+# pwa generated
+/public/sw.js
+/public/workbox-*.js
+/public/worker-*.js
+/public/sw.js.map
+/public/workbox-*.js.map
+/public/fallback-*.js
+
+# misc
+.DS_Store
+*.pem
+/coverage
+/.idea

@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #4A1A3B;
+  --color-accent: #65163D;
+  --color-pegada: #16A34A;
+  --color-tengo: #D97706;
+  --color-falta: #9CA3AF;
+  --color-simon: #2563EB;
+  --color-paul: #EA580C;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply font-sans;
+    overscroll-behavior: none;
+  }
+
+  /* Custom scrollbar for section lists */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-white font-semibold rounded-xl px-6 py-3 
+           active:scale-95 transition-transform duration-100
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply text-primary font-medium rounded-xl px-4 py-2
+           active:bg-primary/10 transition-colors duration-100;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-4;
+  }
+
+  /* Status chip */
+  .chip-pegada  { @apply bg-pegada/15  text-pegada  text-xs font-semibold px-2 py-0.5 rounded-full; }
+  .chip-tengo   { @apply bg-tengo/15   text-tengo   text-xs font-semibold px-2 py-0.5 rounded-full; }
+  .chip-falta   { @apply bg-falta/15   text-gray-500 text-xs font-semibold px-2 py-0.5 rounded-full; }
+
+  /* Owner dot */
+  .dot-simon { @apply w-2 h-2 rounded-full bg-simon inline-block; }
+  .dot-paul  { @apply w-2 h-2 rounded-full bg-paul  inline-block; }
+}
