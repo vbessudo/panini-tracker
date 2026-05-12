@@ -1,15 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Poppins } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { QueryProvider } from '@/lib/query-provider'
 import './globals.css'
-
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-poppins',
-  display: 'swap',
-})
 
 export const metadata: Metadata = {
   title: 'Panini 2026 Tracker',
@@ -36,7 +28,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" className={poppins.variable}>
+    <html lang="es">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="font-sans bg-gray-50 text-gray-900 min-h-screen antialiased">
         <QueryProvider>
           {children}

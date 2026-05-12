@@ -67,8 +67,6 @@ async function addSticker(code: string, owner: Owner, actor: Owner): Promise<Ass
 const GROUPS = ['FIFA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'Bonus']
 
 function SectionPicker({ onPick }: { onPick: (code: string) => void }) {
-  const qc = useQueryClient()
-
   // Group sections
   const byGroup = SECTIONS.reduce<Record<string, typeof SECTIONS>>((acc, s) => {
     const g = s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')
@@ -203,7 +201,7 @@ function NumberInput({
 
       {/* Number display */}
       <div className={cn('flex-1 flex flex-col items-center justify-center gap-2 px-4',
-        shake && 'animate-shake')}>
+        shake && 'shake-anim')}>
         <p className="text-gray-400 text-sm">Número del sticker</p>
         <div className={cn(
           'text-6xl font-bold tabular-nums min-h-[80px] flex items-center',
@@ -273,15 +271,15 @@ function NumberInput({
         </button>
       </div>
 
-      <style jsx>{`
-        @keyframes shake {
+      <style>{`
+        @keyframes panini-shake {
           0%, 100% { transform: translateX(0); }
           20% { transform: translateX(-8px); }
           40% { transform: translateX(8px); }
           60% { transform: translateX(-8px); }
           80% { transform: translateX(8px); }
         }
-        .animate-shake { animation: shake 0.5s ease-in-out; }
+        .shake-anim { animation: panini-shake 0.5s ease-in-out; }
       `}</style>
     </div>
   )
@@ -291,7 +289,7 @@ function NumberInput({
 
 export default function AgregarPage() {
   const [selectedSection, setSelectedSection] = useState<string | null>(null)
-  const { currentUser, recentAdds, pushRecentAdd, removeRecentAdd } = useAppStore()
+  const { currentUser, pushRecentAdd } = useAppStore()
   const qc = useQueryClient()
 
   const handleAdded = useCallback(

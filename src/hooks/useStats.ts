@@ -25,7 +25,7 @@ export function useAlbumStats() {
 
       // Parse
       type SlotRow = { album: string; status: string; sticker_code: string; stickers: { is_bonus: boolean } }
-      const typedSlots = slots as SlotRow[]
+      const typedSlots = slots as unknown as SlotRow[]
       const principal = typedSlots.filter(s => s.album === 'Principal')
       const secundario = typedSlots.filter(s => s.album === 'Secundario')
 
@@ -47,12 +47,12 @@ export function useAlbumStats() {
         principal:   { base: principalBase,  bonus: principalBonus  },
         secundario:  { base: secundarioBase, bonus: secundarioBonus },
         forPasting: {
-          simon: forPasting.filter(r => r.owner === 'Simon').length,
-          paul:  forPasting.filter(r => r.owner === 'Paul').length,
+          Simon: forPasting.filter(r => r.owner === 'Simon').length,
+          Paul:  forPasting.filter(r => r.owner === 'Paul').length,
         },
         repetidas: {
-          simon: repetidas.filter(r => r.owner === 'Simon').length,
-          paul:  repetidas.filter(r => r.owner === 'Paul').length,
+          Simon: repetidas.filter(r => r.owner === 'Simon').length,
+          Paul:  repetidas.filter(r => r.owner === 'Paul').length,
         },
       }
     },

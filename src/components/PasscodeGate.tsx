@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/lib/store'
 import type { Owner } from '@/lib/supabase'
@@ -97,8 +97,7 @@ export function PasscodeGate() {
 
       {/* Dots indicator */}
       <div
-        className={`flex gap-3 mb-10 transition-all ${shake ? 'animate-shake' : ''}`}
-        style={shake ? { animation: 'shake 0.5s ease-in-out' } : {}}
+        className={`flex gap-3 mb-10 transition-all ${shake ? 'shake-anim' : ''}`}
       >
         {Array.from({ length: PASSCODE_LENGTH }).map((_, i) => (
           <div
@@ -139,14 +138,15 @@ export function PasscodeGate() {
         })}
       </div>
 
-      <style jsx>{`
-        @keyframes shake {
+      <style>{`
+        @keyframes panini-shake {
           0%, 100% { transform: translateX(0); }
           20% { transform: translateX(-8px); }
           40% { transform: translateX(8px); }
           60% { transform: translateX(-8px); }
           80% { transform: translateX(8px); }
         }
+        .shake-anim { animation: panini-shake 0.5s ease-in-out; }
       `}</style>
     </div>
   )

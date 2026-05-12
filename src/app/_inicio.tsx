@@ -7,6 +7,7 @@ import { useAlbumStats, useRecentEvents } from '@/hooks/useStats'
 import { useAppStore } from '@/lib/store'
 import { UserBadge, UserSwitcherSheet } from '@/components/UserBadge'
 import { ProgressBar } from '@/components/ProgressBar'
+import type { Owner } from '@/lib/supabase'
 
 function formatEventText(event: { actor: string; kind: string; payload: Record<string, unknown> }): string {
   const { actor, kind, payload } = event
@@ -112,14 +113,14 @@ export default function InicioInner() {
               <div className="flex gap-4">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-simon inline-block" />
-                  <span className="text-sm font-semibold text-gray-700">Simon: {stats.forPasting.simon}</span>
+                  <span className="text-sm font-semibold text-gray-700">Simon: {stats.forPasting.Simon}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-paul inline-block" />
-                  <span className="text-sm font-semibold text-gray-700">Paul: {stats.forPasting.paul}</span>
+                  <span className="text-sm font-semibold text-gray-700">Paul: {stats.forPasting.Paul}</span>
                 </div>
                 <span className="ml-auto text-sm text-gray-400 font-medium">
-                  Total: {stats.forPasting.simon + stats.forPasting.paul}
+                  Total: {stats.forPasting.Simon + stats.forPasting.Paul}
                 </span>
               </div>
             </div>
@@ -130,11 +131,11 @@ export default function InicioInner() {
               <div className="flex gap-4">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-simon inline-block" />
-                  <span className="text-sm font-semibold text-gray-700">Tuyas: {stats.repetidas[currentUser?.toLowerCase() as 'simon' | 'paul'] ?? 0}</span>
+                  <span className="text-sm font-semibold text-gray-700">Tuyas: {stats.repetidas[currentUser as Owner] ?? 0}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-paul inline-block" />
-                  <span className="text-sm font-semibold text-gray-700">De {otherUser}: {stats.repetidas[otherUser.toLowerCase() as 'simon' | 'paul'] ?? 0}</span>
+                  <span className="text-sm font-semibold text-gray-700">De {otherUser}: {stats.repetidas[otherUser as Owner] ?? 0}</span>
                 </div>
               </div>
             </div>
