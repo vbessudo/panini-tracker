@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useAppStore } from '@/lib/store'
 import type { Owner } from '@/lib/supabase'
 
-const PASSCODE_LENGTH = 10 // 'panini2026'
+const PASSCODE_LENGTH = 4 // '2026'
 
 const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 
