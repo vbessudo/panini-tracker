@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { SECTIONS, STICKERS } from '@/data/panini-stickers'
+import { buildSectionGroups } from '@/lib/grouping'
+import { GroupingToggle } from '@/components/GroupingToggle'
 import { AppShell } from '@/components/AppShell'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -12,13 +14,6 @@ import type { Owner, Assignment } from '@/lib/supabase'
 import { Search, X, Trash2, ChevronDown } from 'lucide-react'
 
 // ── WC group structure (shared) ───────────────────────────────────────────────
-
-const WC_GROUP_ORDER = ['FIFA','A','B','C','D','E','F','G','H','I','J','K','L','Bonus']
-const WC_GROUP_LABELS: Record<string,string> = {
-  FIFA:'🏆 FIFA', Bonus:'⭐ Coca-Cola',
-  A:'Grupo A',B:'Grupo B',C:'Grupo C',D:'Grupo D',E:'Grupo E',F:'Grupo F',
-  G:'Grupo G',H:'Grupo H',I:'Grupo I',J:'Grupo J',K:'Grupo K',L:'Grupo L',
-}
 
 type InvRow = {
   id: string; sticker_code: string; owner: Owner; assignment: Assignment
@@ -40,16 +35,16 @@ function useInventory() {
   })
 }
 
-function groupByWCGroup(rows: InvRow[]) {
+// Helper: group InvRows by shared grouping mode for Intercambios Das section
+function groupInvByMode(rows: InvRow[], groupingMode: import('@/lib/grouping').GroupingMode) {
   const bySec: Record<string, InvRow[]> = {}
   rows.forEach(r => { const s = r.stickers?.section ?? '??'; if (!bySec[s]) bySec[s] = []; bySec[s].push(r) })
-  const result: Array<{ groupId: string; groupLabel: string; sections: Array<{ sec: string; label: string; rows: InvRow[] }> }> = []
-  WC_GROUP_ORDER.forEach(groupId => {
-    const groupSecs = SECTIONS.filter(s => (s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')) === groupId)
-      .filter(s => bySec[s.code]).map(s => ({ sec: s.code, label: s.label, rows: bySec[s.code] }))
-    if (groupSecs.length) result.push({ groupId, groupLabel: WC_GROUP_LABELS[groupId], sections: groupSecs })
+  return buildSectionGroups(groupingMode).flatMap(({ groupId, groupLabel, sections }) => {
+    const groupSecs = sections.filter(s => bySec[s.code])
+      .map(s => ({ sec: s.code, label: s.label, rows: bySec[s.code] }))
+    if (!groupSecs.length) return []
+    return [{ groupId, groupLabel, sections: groupSecs }]
   })
-  return result
 }
 
 // ── Routing algorithm (same as agregar) ──────────────────────────────────────
@@ -73,56 +68,96 @@ async function addMona(code: string, owner: Owner, actor: Owner): Promise<Assign
   return assignment
 }
 
+
 // ── TAB 1: Transferencias ─────────────────────────────────────────────────────
 
+type TransferEntry = { code: string; displayName: string; isForil: boolean; rows: InvRow[] }
+type TransferCountry = { sectionCode: string; sectionLabel: string; entries: TransferEntry[] }
+type TransferGroup = { groupId: string; groupLabel: string; countries: TransferCountry[] }
+type TransferMap = Map<string, { rows: InvRow[]; qty: number }>
+
+function buildTransferStructure(rows: InvRow[], groupingMode: import('@/lib/grouping').GroupingMode): TransferGroup[] {
+  const bySec: Record<string, InvRow[]> = {}
+  rows.forEach(r => {
+    const sec = r.stickers?.section ?? '??'
+    if (!bySec[sec]) bySec[sec] = []
+    bySec[sec].push(r)
+  })
+
+  return buildSectionGroups(groupingMode).flatMap(({ groupId, groupLabel, sections }) => {
+    const countries = sections.filter(s => bySec[s.code]?.length).map(s => {
+      const byCode: Record<string, InvRow[]> = {}
+      bySec[s.code].forEach(r => {
+        if (!byCode[r.sticker_code]) byCode[r.sticker_code] = []
+        byCode[r.sticker_code].push(r)
+      })
+      const entries: TransferEntry[] = Object.entries(byCode)
+        .map(([code, codeRows]) => ({
+          code, displayName: codeRows[0].stickers?.display_name ?? code,
+          isForil: codeRows[0].stickers?.is_foil ?? false, rows: codeRows,
+        }))
+        .sort((a, b) => parseInt(a.code.replace(/\D/g,''),10) - parseInt(b.code.replace(/\D/g,''),10))
+      return { sectionCode: s.code, sectionLabel: s.label, entries }
+    })
+    if (!countries.length) return []
+    return [{ groupId, groupLabel, countries }]
+  })
+}
+
 function Transferencias() {
-  const { currentUser } = useAppStore()
+  const { currentUser, groupingMode } = useAppStore()
   const qc = useQueryClient()
   const { data: inventory = [], isLoading } = useInventory()
 
-  const [fromUser, setFromUser] = useState<Owner>(currentUser ?? 'Simon')
-  const [selected, setSelected]   = useState<Set<string>>(new Set())
-  const [search, setSearch]       = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [fromUser, setFromUser]       = useState<Owner>(currentUser ?? 'Simon')
+  const [transferMap, setTransferMap] = useState<TransferMap>(new Map())
+  const [expanded, setExpanded]       = useState<Set<string>>(new Set())
+  const [submitting, setSubmitting]   = useState(false)
 
   const toUser: Owner = fromUser === 'Simon' ? 'Paul' : 'Simon'
 
-  // All monas from the "from" user (any assignment)
-  const fromMonas = inventory.filter(r => r.owner === fromUser)
-  const filtered  = fromMonas.filter(r =>
-    !search || r.sticker_code.toLowerCase().includes(search.toLowerCase()) ||
-    r.stickers?.section_label?.toLowerCase().includes(search.toLowerCase())
-  )
+  const handleSetFrom = (u: Owner) => {
+    setFromUser(u); setTransferMap(new Map()); setExpanded(new Set())
+  }
 
-  const toggle = (id: string) =>
-    setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const fromRows   = inventory.filter(r => r.owner === fromUser)
+  const structure  = buildTransferStructure(fromRows, groupingMode)
+  const totalSelected = Array.from(transferMap.values()).reduce((s, v) => s + v.qty, 0)
 
-  const selectAll = () => setSelected(new Set(filtered.map(r => r.id)))
-  const clearAll  = () => setSelected(new Set())
+  const setQty = (code: string, rows: InvRow[], qty: number) =>
+    setTransferMap(prev => { const m = new Map(prev); qty === 0 ? m.delete(code) : m.set(code, { rows, qty }); return m })
+
+  const toggleExpand = (code: string) =>
+    setExpanded(prev => { const s = new Set(prev); s.has(code) ? s.delete(code) : s.add(code); return s })
+
+  const expandAll   = () => setExpanded(new Set(structure.flatMap(g => g.countries.map(c => c.sectionCode))))
+  const collapseAll = () => setExpanded(new Set())
 
   const handleTransfer = async () => {
-    if (!selected.size) return
+    if (totalSelected === 0) return
     setSubmitting(true)
     try {
-      const ids = Array.from(selected)
-      const { error } = await supabase.from('inventory').update({ owner: toUser }).in('id', ids)
+      const idsToTransfer: string[] = []
+      const codesToLog: string[] = []
+      for (const [code, { rows, qty }] of Array.from(transferMap.entries())) {
+        rows.slice(0, qty).forEach(r => idsToTransfer.push(r.id))
+        Array(qty).fill(code).forEach(c => codesToLog.push(c))
+      }
+      const { error } = await supabase.from('inventory').update({ owner: toUser }).in('id', idsToTransfer)
       if (error) throw error
-
-      const codes = inventory.filter(r => ids.includes(r.id)).map(r => r.sticker_code)
       await supabase.from('events').insert({
         actor: currentUser, kind: 'move',
-        payload: { type: 'owner_transfer', from: fromUser, to: toUser, codes },
+        payload: { type: 'owner_transfer', from: fromUser, to: toUser, codes: codesToLog },
       })
-
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
-      toast.success(`✅ ${ids.length} mona${ids.length > 1 ? 's' : ''} transferida${ids.length > 1 ? 's' : ''} a ${toUser}`)
-      setSelected(new Set())
+      toast.success(`✅ ${totalSelected} mona${totalSelected > 1 ? 's' : ''} transferida${totalSelected > 1 ? 's' : ''} a ${toUser}`)
+      setTransferMap(new Map()); setExpanded(new Set())
       qc.invalidateQueries({ queryKey: ['inventory-cambios'] })
       qc.invalidateQueries({ queryKey: ['inventory'] })
+      qc.invalidateQueries({ queryKey: ['inventory-mazo'] })
       qc.invalidateQueries({ queryKey: ['album-stats'] })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      toast.error('Error en la transferencia', { description: msg })
+      toast.error('Error en la transferencia', { description: err instanceof Error ? err.message : String(err) })
     } finally { setSubmitting(false) }
   }
 
@@ -134,12 +169,10 @@ function Transferencias() {
           <div className="flex-1">
             <p className="text-[10px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">De (entrega)</p>
             <div className="flex gap-2">
-              {(['Simon', 'Paul'] as Owner[]).map(u => (
-                <button key={u} onClick={() => { setFromUser(u); setSelected(new Set()) }}
+              {(['Simon','Paul'] as Owner[]).map(u => (
+                <button key={u} onClick={() => handleSetFrom(u)}
                   className={cn('flex-1 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95',
-                    fromUser === u
-                      ? u === 'Simon' ? 'bg-simon text-white' : 'bg-paul text-white'
-                      : 'bg-gray-100 text-gray-500')}>
+                    fromUser === u ? u === 'Simon' ? 'bg-simon text-white' : 'bg-paul text-white' : 'bg-gray-100 text-gray-500')}>
                   {u === 'Simon' ? '🟦' : '🟩'} {u}
                 </button>
               ))}
@@ -149,93 +182,132 @@ function Transferencias() {
           <div className="flex-1">
             <p className="text-[10px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Para (recibe)</p>
             <div className={cn('py-2.5 rounded-xl font-bold text-sm text-center border-2',
-              toUser === 'Simon'
-                ? 'border-simon/40 bg-simon/10 text-simon'
-                : 'border-paul/40 bg-paul/10 text-paul')}>
+              toUser === 'Simon' ? 'border-simon/40 bg-simon/10 text-simon' : 'border-paul/40 bg-paul/10 text-paul')}>
               {toUser === 'Simon' ? '🟦 Simon' : '🟩 Paul'}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Search + select helpers */}
-      <div className="px-4 pt-3 pb-2 space-y-2">
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por código o selección..."
-            className="w-full pl-9 pr-9 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-          {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X size={14} /></button>}
-        </div>
-        <div className="flex gap-2 text-xs">
-          <button onClick={selectAll} className="text-primary font-semibold bg-primary/10 px-3 py-1.5 rounded-full active:bg-primary/20">
-            Seleccionar todas ({filtered.length})
-          </button>
-          {selected.size > 0 && (
-            <button onClick={clearAll} className="text-gray-500 font-semibold bg-gray-100 px-3 py-1.5 rounded-full active:bg-gray-200">
-              Limpiar ({selected.size})
-            </button>
-          )}
+      {/* Counter bar */}
+      <div className="px-4 py-2 flex items-center justify-between bg-gray-50 border-b border-gray-100">
+        <p className="text-xs text-gray-400">
+          {fromRows.length === 0 ? `${fromUser} no tiene monas` : `${fromRows.length} disponibles`}
+          {totalSelected > 0 && <span className="text-primary font-semibold"> · {totalSelected} seleccionada{totalSelected > 1 ? 's' : ''}</span>}
+        </p>
+        <div className="flex gap-3">
+          <button onClick={expandAll}   className="text-[11px] text-primary font-semibold active:opacity-70">Abrir todo</button>
+          <button onClick={collapseAll} className="text-[11px] text-gray-400  font-semibold active:opacity-70">Cerrar</button>
         </div>
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto px-4 pb-2">
+      {/* Country list */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {isLoading ? (
-          <div className="space-y-2">{[...Array(4)].map((_,i) => <div key={i} className="card h-12 animate-pulse bg-gray-200"/>)}</div>
-        ) : fromMonas.length === 0 ? (
+          [...Array(4)].map((_, i) => <div key={i} className="card h-12 animate-pulse bg-gray-200"/>)
+        ) : fromRows.length === 0 ? (
           <p className="text-center text-gray-400 py-12 text-sm">{fromUser} no tiene monas en el mazo.</p>
         ) : (
-          groupByWCGroup(filtered).map(({ groupId, groupLabel, sections }) => (
-            <div key={groupId} className="mb-4">
-              <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1.5">{groupLabel}</p>
-              {sections.map(({ sec, label, rows }) => (
-                <div key={sec} className="mb-2">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1">{label}</p>
-                  <div className="space-y-1">
-                    {rows.map(r => {
-                      const isSel = selected.has(r.id)
-                      return (
-                        <button key={r.id} onClick={() => toggle(r.id)}
-                          className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all active:scale-[0.98]',
-                            isSel ? 'bg-primary/5 border-primary/40' : 'bg-white border-gray-100')}>
-                          <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
-                            isSel ? 'bg-primary border-primary' : 'border-gray-300')}>
-                            {isSel && <span className="text-white text-[10px] font-bold">✓</span>}
-                          </div>
-                          <div className="flex-1 text-left">
-                            <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
-                            <span className="text-xs text-gray-400 ml-2">{r.stickers?.display_name}</span>
-                          </div>
-                          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                            r.assignment === 'Principal' ? 'bg-primary/10 text-primary'
-                            : r.assignment === 'Secundario' ? 'bg-accent/10 text-accent'
-                            : 'bg-gray-100 text-gray-500')}>
-                            {r.assignment === 'Principal' ? '🅐' : r.assignment === 'Secundario' ? '🅑' : '🔄'}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
+          structure.map(({ groupId, groupLabel, countries }) => (
+            <div key={groupId}>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{groupLabel}</p>
+              <div className="space-y-1.5">
+                {countries.map(({ sectionCode, sectionLabel, entries }) => {
+                  const isExpanded       = expanded.has(sectionCode)
+                  const sectionSelected  = entries.reduce((s, e) => s + (transferMap.get(e.code)?.qty ?? 0), 0)
+
+                  return (
+                    <div key={sectionCode}
+                      className={cn('rounded-2xl overflow-hidden border transition-all',
+                        isExpanded ? 'border-primary/30' : 'border-gray-100 bg-white')}>
+
+                      <button onClick={() => toggleExpand(sectionCode)}
+                        className={cn('w-full flex items-center justify-between px-4 py-3',
+                          isExpanded ? 'bg-primary/5' : 'bg-white active:bg-gray-50')}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono font-bold text-xs text-gray-400 shrink-0">{sectionCode}</span>
+                          <span className="font-semibold text-sm text-gray-800 truncate">{sectionLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          {sectionSelected > 0 && (
+                            <span className="text-[10px] font-bold bg-primary text-white px-2 py-0.5 rounded-full">
+                              {sectionSelected} sel.
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">{entries.length} mona{entries.length !== 1 ? 's' : ''}</span>
+                          <ChevronDown size={14} className={cn('text-gray-400 transition-transform duration-200', isExpanded && 'rotate-180')} />
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="border-t border-primary/10 divide-y divide-gray-50">
+                          {entries.map(({ code, displayName, isForil, rows }) => {
+                            const max = rows.length
+                            const qty = transferMap.get(code)?.qty ?? 0
+
+                            return (
+                              <div key={code} className="flex items-center px-4 py-3 gap-3 bg-white">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-bold text-sm text-gray-800">{code}</span>
+                                    {isForil && <span className="text-[9px] text-amber-500">✦</span>}
+                                    {max > 1 && (
+                                      <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-1.5 py-0.5 rounded-full">
+                                        ×{max} disponibles
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-400 truncate">{displayName}</p>
+                                </div>
+
+                                {/* Stepper */}
+                                {max === 1 ? (
+                                  <button onClick={() => setQty(code, rows, qty === 1 ? 0 : 1)}
+                                    className={cn('w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all',
+                                      qty === 1 ? 'bg-primary border-primary text-white' : 'border-gray-300 text-transparent active:border-primary/50')}>
+                                    ✓
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <button onClick={() => setQty(code, rows, Math.max(0, qty - 1))} disabled={qty === 0}
+                                      className="w-8 h-8 rounded-full bg-gray-100 disabled:opacity-30 font-bold text-gray-600 flex items-center justify-center active:bg-gray-200 text-lg leading-none">
+                                      −
+                                    </button>
+                                    <span className={cn('text-sm font-bold tabular-nums w-8 text-center',
+                                      qty > 0 ? 'text-primary' : 'text-gray-300')}>
+                                      {qty > 0 ? `${qty}/${max}` : `—/${max}`}
+                                    </span>
+                                    <button onClick={() => setQty(code, rows, Math.min(max, qty + 1))} disabled={qty === max}
+                                      className="w-8 h-8 rounded-full bg-primary/10 text-primary disabled:opacity-30 font-bold flex items-center justify-center active:bg-primary/20 text-lg leading-none">
+                                      +
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Confirm bar */}
       <div className="px-4 py-4 border-t border-gray-100 bg-white">
-        <button onClick={handleTransfer} disabled={submitting || selected.size === 0}
+        <button onClick={handleTransfer} disabled={submitting || totalSelected === 0}
           className="btn-primary w-full py-4 text-base disabled:opacity-50">
           {submitting ? 'Transfiriendo…'
-            : selected.size === 0 ? 'Selecciona monas para transferir'
-            : `✓ Transferir ${selected.size} mona${selected.size > 1 ? 's' : ''} a ${toUser}`}
+            : totalSelected === 0 ? 'Selecciona monas para transferir'
+            : `✓ Transferir ${totalSelected} mona${totalSelected > 1 ? 's' : ''} a ${toUser}`}
         </button>
       </div>
     </div>
   )
 }
-
 
 // ── TAB 2: Intercambios ───────────────────────────────────────────────────────
 
@@ -268,69 +340,52 @@ type TradeGroup = {
 
 function buildTradeStructure(
   inventory: InvRow[],
-  slots: Record<string, string>,   // "code-album" → status
+  slots: Record<string, string>,
+  groupingMode: import('@/lib/grouping').GroupingMode,
 ): TradeGroup[] {
-  // Determine which rows are tradeable
   const tradeable = inventory.filter(r => {
-    // Rule 1: explicitly a repetida
     if (r.assignment === 'Repetida') return true
-    // Rule 2: Paul's deck is always available
     if (r.owner === 'Paul') return true
-    // Rule 3: Principal is already pegada — on-hand copies are surplus
     if (slots[`${r.sticker_code}-Principal`] === 'Pegada') return true
     return false
   })
 
-  // Deduplicate by sticker_code
   const byCode = new Map<string, TradeEntry>()
   for (const r of tradeable) {
     const existing = byCode.get(r.sticker_code)
     const reason = r.assignment === 'Repetida' ? 'repetida'
       : r.owner === 'Paul' ? 'paul_deck' : 'principal_done'
     if (existing) {
-      existing.rows.push(r)
-      existing.count++
+      existing.rows.push(r); existing.count++
       if (!existing.owners.includes(r.owner)) existing.owners.push(r.owner)
       if (!existing.reasons.includes(reason)) existing.reasons.push(reason)
     } else {
-      const mona = STICKERS.find(s => s.code === r.sticker_code)
       byCode.set(r.sticker_code, {
         sticker_code: r.sticker_code,
         display_name: r.stickers?.display_name ?? r.sticker_code,
         number: r.stickers?.number ?? 0,
         is_foil: r.stickers?.is_foil ?? false,
-        rows: [r],
-        count: 1,
-        owners: [r.owner],
-        reasons: [reason],
+        rows: [r], count: 1, owners: [r.owner], reasons: [reason],
       })
     }
   }
 
-  // Group by WC group → country
   const bySec: Record<string, TradeEntry[]> = {}
   for (const entry of Array.from(byCode.values())) {
-    const mona = STICKERS.find(s => s.code === entry.sticker_code)
-    const sec = mona?.section ?? '??'
+    const sec = STICKERS.find(s => s.code === entry.sticker_code)?.section ?? '??'
     if (!bySec[sec]) bySec[sec] = []
     bySec[sec].push(entry)
   }
-  for (const entries of Object.values(bySec)) {
-    entries.sort((a, b) => a.number - b.number)
-  }
+  for (const entries of Object.values(bySec)) entries.sort((a, b) => a.number - b.number)
 
-  return WC_GROUP_ORDER.flatMap(groupId => {
-    const groupSections = SECTIONS.filter(
-      s => (s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')) === groupId && bySec[s.code]
-    )
-    if (!groupSections.length) return []
-    const countries: TradeCountry[] = groupSections.map(s => ({
-      sectionCode: s.code,
-      sectionLabel: s.label,
+  return buildSectionGroups(groupingMode).flatMap(({ groupId, groupLabel, sections }) => {
+    const countries = sections.filter(s => bySec[s.code]).map(s => ({
+      sectionCode: s.code, sectionLabel: s.label,
       entries: bySec[s.code],
       totalCopies: bySec[s.code].reduce((sum, e) => sum + e.count, 0),
     }))
-    return [{ groupId, groupLabel: WC_GROUP_LABELS[groupId], countries }]
+    if (!countries.length) return []
+    return [{ groupId, groupLabel, countries }]
   })
 }
 
@@ -342,7 +397,7 @@ const REASON_LABEL: Record<string, string> = {
 }
 
 function Intercambios() {
-  const { currentUser } = useAppStore()
+  const { currentUser, groupingMode } = useAppStore()
   const qc = useQueryClient()
   const { data: inventory = [] } = useInventory()
 
@@ -365,7 +420,7 @@ function Intercambios() {
   const [addSearch, setAddSearch] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const tradeStructure = buildTradeStructure(inventory, slots)
+  const tradeStructure = buildTradeStructure(inventory, slots, groupingMode)
   const totalTradeable = tradeStructure.reduce((sum, g) =>
     sum + g.countries.reduce((s2, c) => s2 + c.totalCopies, 0), 0)
 
@@ -692,7 +747,10 @@ export default function CambiosPage() {
     <AppShell>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <header className="bg-primary px-4 pt-safe-top pb-0">
-          <h1 className="text-white font-bold text-lg pt-4 pb-2">Cambios</h1>
+          <div className="flex items-center justify-between pt-4 pb-2">
+            <h1 className="text-white font-bold text-lg">Cambios</h1>
+            <GroupingToggle />
+          </div>
           <div className="flex">
             {[
               { key: 'transferencias', label: '⇄ Internas' },

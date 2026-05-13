@@ -7,26 +7,12 @@ import { SECTIONS, STICKERS } from '@/data/panini-stickers'
 import type { Album, Owner } from '@/lib/supabase'
 import { AppShell } from '@/components/AppShell'
 import { ProgressBar } from '@/components/ProgressBar'
+import { GroupingToggle } from '@/components/GroupingToggle'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAppStore } from '@/lib/store'
+import { buildSectionGroups } from '@/lib/grouping'
 import { X } from 'lucide-react'
-
-// ── WC Group structure ────────────────────────────────────────────────────────
-
-const WC_GROUP_ORDER = ['FIFA','A','B','C','D','E','F','G','H','I','J','K','L','Bonus']
-const WC_GROUP_LABELS: Record<string,string> = {
-  FIFA: '🏆 FIFA World Cup', Bonus: '⭐ Coca-Cola Bonus',
-  A:'Grupo A', B:'Grupo B', C:'Grupo C', D:'Grupo D', E:'Grupo E', F:'Grupo F',
-  G:'Grupo G', H:'Grupo H', I:'Grupo I', J:'Grupo J', K:'Grupo K', L:'Grupo L',
-}
-
-const sectionsByGroup = SECTIONS.reduce<Record<string, typeof SECTIONS>>((acc, s) => {
-  const g = s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')
-  if (!acc[g]) acc[g] = []
-  acc[g].push(s)
-  return acc
-}, {})
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
@@ -271,17 +257,23 @@ export default function AlbumPage() {
   const { data: slots, isLoading } = useAlbumSlots(album)
 
   // Build section progress map
+  const { groupingMode } = useAppStore()
   const sectionProgress = SECTIONS.reduce<Record<string, { pegada: number; total: number }>>((acc, s) => {
     const sectionSlots = slots?.filter(r => r.stickers?.section === s.code) ?? []
     acc[s.code] = { pegada: sectionSlots.filter(r => r.status === 'Pegada').length, total: sectionSlots.length }
     return acc
   }, {})
 
+  const groups = buildSectionGroups(groupingMode)
+
   return (
     <AppShell>
       <div className="min-h-screen bg-gray-50">
         <header className="bg-primary px-4 pt-safe-top pb-0">
-          <h1 className="text-white font-bold text-lg pt-4 pb-2">Álbum</h1>
+          <div className="flex items-center justify-between pt-4 pb-2">
+            <h1 className="text-white font-bold text-lg">Álbum</h1>
+            <GroupingToggle />
+          </div>
           <div className="flex">
             {(['Principal','Secundario'] as Album[]).map(a => (
               <button key={a} onClick={() => { setAlbum(a); setSelectedSection(null) }}
@@ -305,21 +297,17 @@ export default function AlbumPage() {
             {isLoading ? (
               [...Array(8)].map((_, i) => <div key={i} className="card h-14 animate-pulse bg-gray-200" />)
             ) : (
-              WC_GROUP_ORDER.map(groupId => {
-                const secs = sectionsByGroup[groupId]
-                if (!secs?.length) return null
-                const groupTotal = secs.reduce((sum, s) => sum + (sectionProgress[s.code]?.total ?? 0), 0)
-                const groupPegada = secs.reduce((sum, s) => sum + (sectionProgress[s.code]?.pegada ?? 0), 0)
+              groups.map(({ groupId, groupLabel, sections }) => {
+                const groupTotal  = sections.reduce((sum, s) => sum + (sectionProgress[s.code]?.total  ?? 0), 0)
+                const groupPegada = sections.reduce((sum, s) => sum + (sectionProgress[s.code]?.pegada ?? 0), 0)
                 return (
                   <div key={groupId}>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                        {WC_GROUP_LABELS[groupId]}
-                      </p>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{groupLabel}</p>
                       <span className="text-xs text-gray-400 font-medium tabular-nums">{groupPegada}/{groupTotal}</span>
                     </div>
                     <div className="space-y-1.5">
-                      {secs.map(s => {
+                      {sections.map(s => {
                         const prog = sectionProgress[s.code] ?? { pegada: 0, total: 0 }
                         const complete = prog.total > 0 && prog.pegada === prog.total
                         return (

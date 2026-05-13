@@ -5,6 +5,8 @@ import { AppShell } from '@/components/AppShell'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { SECTIONS, STICKERS } from '@/data/panini-stickers'
+import { buildSectionGroups } from '@/lib/grouping'
+import { GroupingToggle } from '@/components/GroupingToggle'
 import type { Owner, Assignment } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
@@ -42,43 +44,31 @@ async function addMona(code: string, owner: Owner, actor: Owner): Promise<Assign
 
 // ── Section Picker ────────────────────────────────────────────────────────────
 
-const GROUPS = ['FIFA','A','B','C','D','E','F','G','H','I','J','K','L','Bonus']
-
 function SectionPicker({ onPick }: { onPick: (code: string) => void }) {
-  const byGroup = SECTIONS.reduce<Record<string, typeof SECTIONS>>((acc, s) => {
-    const g = s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')
-    if (!acc[g]) acc[g] = []
-    acc[g].push(s)
-    return acc
-  }, {})
+  const { groupingMode } = useAppStore()
+  const groups = buildSectionGroups(groupingMode)
 
   return (
     <div className="px-4 py-4 space-y-5">
-      {GROUPS.map((g) => {
-        const secs = byGroup[g]
-        if (!secs?.length) return null
-        return (
-          <div key={g}>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
-              {g === 'FIFA' ? 'FIFA World Cup' : g === 'Bonus' ? 'Bonus Coca-Cola' : `Grupo ${g}`}
-            </p>
-            <div className="space-y-1">
-              {secs.map((s) => (
-                <button key={s.code} onClick={() => onPick(s.code)}
-                  className="w-full flex items-center justify-between bg-white rounded-xl px-4 py-3
-                             border border-gray-100 active:bg-primary/5 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono font-bold text-gray-400 w-8">{s.code}</span>
-                    <span className="text-sm font-medium text-gray-800">{s.label}</span>
-                    {s.code === 'COC' && <span className="text-amber-500">⭐</span>}
-                  </div>
-                  <span className="text-xs text-gray-400">›</span>
-                </button>
-              ))}
-            </div>
+      {groups.map(({ groupId, groupLabel, sections }) => (
+        <div key={groupId}>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{groupLabel}</p>
+          <div className="space-y-1">
+            {sections.map((s) => (
+              <button key={s.code} onClick={() => onPick(s.code)}
+                className="w-full flex items-center justify-between bg-white rounded-xl px-4 py-3
+                           border border-gray-100 active:bg-primary/5 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono font-bold text-gray-400 w-8">{s.code}</span>
+                  <span className="text-sm font-medium text-gray-800">{s.label}</span>
+                  {s.code === 'COC' && <span className="text-amber-500">⭐</span>}
+                </div>
+                <span className="text-xs text-gray-400">›</span>
+              </button>
+            ))}
           </div>
-        )
-      })}
+        </div>
+      ))}
     </div>
   )
 }
@@ -345,7 +335,10 @@ export default function AgregarPage() {
         {!selectedSection ? (
           <>
             <header className="bg-primary px-4 pt-safe-top pb-4">
-              <h1 className="text-white font-bold text-lg">Agregar monas</h1>
+              <div className="flex items-center justify-between mb-1">
+                <h1 className="text-white font-bold text-lg">Agregar monas</h1>
+                <GroupingToggle />
+              </div>
               <p className="text-white/70 text-sm">Elige la sección</p>
             </header>
             <div className="overflow-y-auto flex-1">

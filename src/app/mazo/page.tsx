@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { SECTIONS, STICKERS } from '@/data/panini-stickers'
+import { buildSectionGroups } from '@/lib/grouping'
+import { GroupingToggle } from '@/components/GroupingToggle'
 import { AppShell } from '@/components/AppShell'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -13,12 +15,8 @@ import { Search, X, ChevronDown } from 'lucide-react'
 
 // ── WC Group structure ────────────────────────────────────────────────────────
 
-const WC_GROUP_ORDER = ['FIFA','A','B','C','D','E','F','G','H','I','J','K','L','Bonus']
-const WC_GROUP_LABELS: Record<string,string> = {
-  FIFA:'🏆 FIFA World Cup', Bonus:'⭐ Coca-Cola',
-  A:'Grupo A',B:'Grupo B',C:'Grupo C',D:'Grupo D',E:'Grupo E',F:'Grupo F',
-  G:'Grupo G',H:'Grupo H',I:'Grupo I',J:'Grupo J',K:'Grupo K',L:'Grupo L',
-}
+
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -123,8 +121,7 @@ type WCGroup = {
   countries: CountryBlock[]
 }
 
-function buildStructure(rows: InvRow[]): WCGroup[] {
-  // Bucket rows by section
+function buildStructure(rows: InvRow[], groupingMode: import('@/lib/grouping').GroupingMode): WCGroup[] {
   const bySec: Record<string, InvRow[]> = {}
   rows.forEach(r => {
     const sec = r.stickers?.section ?? '??'
@@ -132,10 +129,10 @@ function buildStructure(rows: InvRow[]): WCGroup[] {
     bySec[sec].push(r)
   })
 
-  return WC_GROUP_ORDER.flatMap(groupId => {
-    const groupSections = SECTIONS.filter(
-      s => (s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')) === groupId && bySec[s.code]
-    )
+  const sectionGroups = buildSectionGroups(groupingMode)
+
+  return sectionGroups.flatMap(({ groupId, groupLabel, sections }) => {
+    const groupSections = sections.filter(s => bySec[s.code])
     if (!groupSections.length) return []
 
     const countries: CountryBlock[] = groupSections.map(s => {
@@ -151,7 +148,7 @@ function buildStructure(rows: InvRow[]): WCGroup[] {
       }
     })
 
-    return [{ groupId, groupLabel: WC_GROUP_LABELS[groupId], countries }]
+    return [{ groupId, groupLabel, countries }]
   })
 }
 
@@ -361,7 +358,7 @@ function CountryBlock({ country, tab, slots, isExpanded, onToggle, onSelect }: {
 // ── Main Mazo Page ────────────────────────────────────────────────────────────
 
 export default function MazoPage() {
-  const { currentUser } = useAppStore()
+  const { currentUser, groupingMode } = useAppStore()
   const [tab, setTab] = useState<'pegar' | 'mis' | 'otro'>('pegar')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -400,7 +397,7 @@ export default function MazoPage() {
     r.stickers?.display_name?.toLowerCase().includes(search.toLowerCase())
   )
 
-  const structure = buildStructure(filtered)
+  const structure = buildStructure(filtered, groupingMode)
 
   const toggleExpand = (code: string) =>
     setExpanded(prev => { const s = new Set(prev); s.has(code) ? s.delete(code) : s.add(code); return s })
@@ -423,7 +420,10 @@ export default function MazoPage() {
     <AppShell>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <header className="bg-primary px-4 pt-safe-top pb-0">
-          <h1 className="text-white font-bold text-lg pt-4 pb-2">Mazo</h1>
+          <div className="flex items-center justify-between pt-4 pb-2">
+            <h1 className="text-white font-bold text-lg">Mazo</h1>
+            <GroupingToggle />
+          </div>
           <div className="flex overflow-x-auto scrollbar-hide">
             {tabConfig.map(({ key, label }) => (
               <button key={key} onClick={() => { setTab(key as typeof tab); setSearch(''); setExpanded(new Set()) }}
