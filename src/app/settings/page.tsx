@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Owner } from '@/lib/supabase'
-import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 
 export default function SettingsPage() {
@@ -112,6 +112,15 @@ export default function SettingsPage() {
               ))}
             </div>
           </div>
+
+          {/* User guide */}
+          <Link href="/ayuda" className="card flex items-center justify-between active:bg-gray-50">
+            <div>
+              <h2 className="font-bold text-gray-800">📖 Guía de uso</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Glosario, cómo agregar monas, tips y códigos</p>
+            </div>
+            <span className="text-gray-400 text-lg">›</span>
+          </Link>
 
           {/* Export */}
           <div className="card">
