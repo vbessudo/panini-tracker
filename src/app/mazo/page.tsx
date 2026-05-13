@@ -5,6 +5,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { SECTIONS } from '@/data/panini-stickers'
 import { AppShell } from '@/components/AppShell'
+
+const WC_GROUP_ORDER = ['FIFA','A','B','C','D','E','F','G','H','I','J','K','L','Bonus']
+const WC_GROUP_LABELS: Record<string,string> = {
+  FIFA:'🏆 FIFA', Bonus:'⭐ Coca-Cola',
+  A:'Grupo A',B:'Grupo B',C:'Grupo C',D:'Grupo D',E:'Grupo E',F:'Grupo F',
+  G:'Grupo G',H:'Grupo H',I:'Grupo I',J:'Grupo J',K:'Grupo K',L:'Grupo L',
+}
+
+
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -220,23 +229,25 @@ export default function MazoPage() {
     r.stickers?.section_label?.toLowerCase().includes(search.toLowerCase())
   )
 
-  // Group by section, respecting canonical album order
-  const groupBySection = (rows: InvRow[]) => {
-    const grouped: Record<string, InvRow[]> = {}
+  // Group rows by WC group → section, in canonical order
+  const groupByWCGroup = (rows: InvRow[]) => {
+    // First bucket by section
+    const bySec: Record<string, InvRow[]> = {}
     rows.forEach(r => {
       const sec = r.stickers?.section ?? '??'
-      if (!grouped[sec]) grouped[sec] = []
-      grouped[sec].push(r)
+      if (!bySec[sec]) bySec[sec] = []
+      bySec[sec].push(r)
     })
-    // Sort sections by canonical order from SECTIONS, unknown sections go last
-    const sectionOrder = SECTIONS.map(s => s.code)
-    return Object.fromEntries(
-      Object.entries(grouped).sort(([a], [b]) => {
-        const ai = sectionOrder.indexOf(a)
-        const bi = sectionOrder.indexOf(b)
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
-      })
-    )
+    // Then bucket sections into WC groups in canonical order
+    const result: Array<{ groupId: string; groupLabel: string; sections: Array<{ sec: string; label: string; rows: InvRow[] }> }> = []
+    WC_GROUP_ORDER.forEach(groupId => {
+      const secLabel = WC_GROUP_LABELS[groupId]
+      const groupSecs = SECTIONS.filter(s => (s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')) === groupId)
+        .filter(s => bySec[s.code])
+        .map(s => ({ sec: s.code, label: s.label, rows: bySec[s.code] }))
+      if (groupSecs.length) result.push({ groupId, groupLabel: secLabel, sections: groupSecs })
+    })
+    return result
   }
 
   // Group for pasting by owner
@@ -289,30 +300,33 @@ export default function MazoPage() {
                           <p className="text-xs font-bold text-simon uppercase tracking-widest mb-3">
                             🟦 Simon · {simonPasting.length} mona{simonPasting.length > 1 ? 's' : ''}
                           </p>
-                          <div className="space-y-3">
-                            {Object.entries(groupBySection(simonPasting)).map(([sec, rows]) => (
-                              <div key={sec}>
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                                  <span>{rows[0]?.stickers?.section_label ?? sec}</span>
-                                  <span className="bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 normal-case font-semibold">{rows.length}</span>
-                                </p>
-                                <div className="space-y-1">
-                                  {rows.map(r => (
-                                    <button key={r.id} onClick={() => setSelectedInv(r)}
-                                      className="w-full card flex items-center justify-between py-2.5 active:bg-gray-50">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
-                                        <span className="text-xs text-gray-400 truncate max-w-[140px]">{r.stickers?.display_name}</span>
-                                      </div>
-                                      <span className={cn(
-                                        'text-xs font-bold px-2 py-0.5 rounded-full shrink-0',
-                                        r.assignment === 'Principal' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
-                                      )}>
-                                        {r.assignment === 'Principal' ? '🅐' : '🅑'}
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
+                          <div className="space-y-4">
+                            {groupByWCGroup(simonPasting).map(({ groupId, groupLabel, sections }) => (
+                              <div key={groupId}>
+                                <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1.5">{groupLabel}</p>
+                                {sections.map(({ sec, label, rows }) => (
+                                  <div key={sec} className="mb-2">
+                                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center justify-between">
+                                      <span>{label}</span>
+                                      <span className="bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 normal-case font-semibold">{rows.length}</span>
+                                    </p>
+                                    <div className="space-y-1">
+                                      {rows.map(r => (
+                                        <button key={r.id} onClick={() => setSelectedInv(r)}
+                                          className="w-full card flex items-center justify-between py-2.5 active:bg-gray-50">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
+                                            <span className="text-xs text-gray-400 truncate max-w-[130px]">{r.stickers?.display_name}</span>
+                                          </div>
+                                          <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full shrink-0',
+                                            r.assignment === 'Principal' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent')}>
+                                            {r.assignment === 'Principal' ? '🅐' : '🅑'}
+                                          </span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             ))}
                           </div>
@@ -323,30 +337,33 @@ export default function MazoPage() {
                           <p className="text-xs font-bold text-paul uppercase tracking-widest mb-3">
                             🟧 Paul · {paulPasting.length} mona{paulPasting.length > 1 ? 's' : ''}
                           </p>
-                          <div className="space-y-3">
-                            {Object.entries(groupBySection(paulPasting)).map(([sec, rows]) => (
-                              <div key={sec}>
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                                  <span>{rows[0]?.stickers?.section_label ?? sec}</span>
-                                  <span className="bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 normal-case font-semibold">{rows.length}</span>
-                                </p>
-                                <div className="space-y-1">
-                                  {rows.map(r => (
-                                    <button key={r.id} onClick={() => setSelectedInv(r)}
-                                      className="w-full card flex items-center justify-between py-2.5 active:bg-gray-50">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
-                                        <span className="text-xs text-gray-400 truncate max-w-[140px]">{r.stickers?.display_name}</span>
-                                      </div>
-                                      <span className={cn(
-                                        'text-xs font-bold px-2 py-0.5 rounded-full shrink-0',
-                                        r.assignment === 'Principal' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
-                                      )}>
-                                        {r.assignment === 'Principal' ? '🅐' : '🅑'}
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
+                          <div className="space-y-4">
+                            {groupByWCGroup(paulPasting).map(({ groupId, groupLabel, sections }) => (
+                              <div key={groupId}>
+                                <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1.5">{groupLabel}</p>
+                                {sections.map(({ sec, label, rows }) => (
+                                  <div key={sec} className="mb-2">
+                                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center justify-between">
+                                      <span>{label}</span>
+                                      <span className="bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 normal-case font-semibold">{rows.length}</span>
+                                    </p>
+                                    <div className="space-y-1">
+                                      {rows.map(r => (
+                                        <button key={r.id} onClick={() => setSelectedInv(r)}
+                                          className="w-full card flex items-center justify-between py-2.5 active:bg-gray-50">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
+                                            <span className="text-xs text-gray-400 truncate max-w-[130px]">{r.stickers?.display_name}</span>
+                                          </div>
+                                          <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full shrink-0',
+                                            r.assignment === 'Principal' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent')}>
+                                            {r.assignment === 'Principal' ? '🅐' : '🅑'}
+                                          </span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             ))}
                           </div>
@@ -381,32 +398,31 @@ export default function MazoPage() {
                       {tab === 'otro' ? `${otherUser} no tiene repetidas` : 'No tienes repetidas'}
                     </p>
                   ) : (
-                    Object.entries(groupBySection(filteredReps)).map(([sec, rows]) => (
-                      <div key={sec} className="mb-4">
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
-                          {rows[0]?.stickers?.section_label ?? sec}
-                          <span className="ml-2 bg-gray-200 text-gray-600 rounded-full px-2 py-0.5 font-semibold normal-case text-[10px]">
-                            {rows.length}
-                          </span>
-                        </p>
-                        <div className="space-y-1">
-                          {rows.map(r => (
-                            <button
-                              key={r.id}
-                              onClick={() => tab === 'mis' ? setSelectedInv(r) : undefined}
-                              className={cn(
-                                'w-full card flex items-center justify-between py-3',
-                                tab === 'mis' ? 'active:bg-gray-50' : 'cursor-default'
-                              )}
-                            >
-                              <div>
-                                <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
-                                <span className="text-xs text-gray-400 ml-2">{r.stickers?.display_name}</span>
-                              </div>
-                              {tab === 'mis' && <span className="text-gray-300 text-sm">›</span>}
-                            </button>
-                          ))}
-                        </div>
+                    groupByWCGroup(filteredReps).map(({ groupId, groupLabel, sections }) => (
+                      <div key={groupId} className="mb-4">
+                        <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-2">{groupLabel}</p>
+                        {sections.map(({ sec, label, rows }) => (
+                          <div key={sec} className="mb-3">
+                            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center justify-between">
+                              <span>{label}</span>
+                              <span className="bg-gray-200 text-gray-600 rounded-full px-2 py-0.5 normal-case font-semibold text-[10px]">{rows.length}</span>
+                            </p>
+                            <div className="space-y-1">
+                              {rows.map(r => (
+                                <button key={r.id}
+                                  onClick={() => tab === 'mis' ? setSelectedInv(r) : undefined}
+                                  className={cn('w-full card flex items-center justify-between py-2.5',
+                                    tab === 'mis' ? 'active:bg-gray-50' : 'cursor-default')}>
+                                  <div>
+                                    <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
+                                    <span className="text-xs text-gray-400 ml-2">{r.stickers?.display_name}</span>
+                                  </div>
+                                  {tab === 'mis' && <span className="text-gray-300 text-sm">›</span>}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ))
                   )}

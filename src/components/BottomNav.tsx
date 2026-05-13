@@ -2,14 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, BookOpen, Package, Plus } from 'lucide-react'
+import { Home, BookOpen, Package, Plus, ArrowLeftRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const tabs = [
-  { href: '/',       label: 'Inicio',  Icon: Home       },
-  { href: '/album',  label: 'Álbum',   Icon: BookOpen   },
-  { href: '/agregar',label: 'Agregar', Icon: Plus, cta: true },
-  { href: '/mazo',   label: 'Mazo',    Icon: Package    },
+  { href: '/',        label: 'Inicio',   Icon: Home           },
+  { href: '/album',   label: 'Álbum',    Icon: BookOpen       },
+  { href: '/agregar', label: 'Agregar',  Icon: Plus, cta: true },
+  { href: '/mazo',    label: 'Mazo',     Icon: Package        },
+  { href: '/cambios', label: 'Cambios',  Icon: ArrowLeftRight },
 ]
 
 export function BottomNav() {
