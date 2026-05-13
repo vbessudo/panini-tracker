@@ -139,6 +139,57 @@ export default function InicioInner() {
                 </div>
               </div>
             </div>
+
+            {/* 4 collection states */}
+            {stats.states && (
+              <div className="card">
+                <h3 className="font-bold text-gray-800 mb-3">📊 Estado de la colección</h3>
+                <div className="space-y-2">
+                  {[
+                    {
+                      label: 'Pegada en ambos álbumes',
+                      value: stats.states.base.bothPegada,
+                      color: 'bg-green-500',
+                      desc: 'Completa — en los dos álbumes',
+                    },
+                    {
+                      label: 'Un álbum pegado + en mano',
+                      value: stats.states.base.onePegadaOneHand,
+                      color: 'bg-blue-400',
+                      desc: 'Pegada en uno, lista para el otro',
+                    },
+                    {
+                      label: 'En mano para ambos álbumes',
+                      value: stats.states.base.bothHand,
+                      color: 'bg-violet-400',
+                      desc: 'Lista para pegar en los dos',
+                    },
+                    {
+                      label: 'En mano para un álbum',
+                      value: stats.states.base.oneHand,
+                      color: 'bg-amber-400',
+                      desc: 'Solo cubre un álbum',
+                    },
+                  ].map(({ label, value, color, desc }) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${color}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-700 truncate">{label}</p>
+                        <p className="text-[11px] text-gray-400">{desc}</p>
+                      </div>
+                      <span className="text-sm font-bold text-gray-800 tabular-nums shrink-0">{value}</span>
+                    </div>
+                  ))}
+                  <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between text-xs text-gray-400">
+                    <span>Total con seguimiento</span>
+                    <span className="font-semibold tabular-nums">
+                      {stats.states.base.bothPegada + stats.states.base.onePegadaOneHand +
+                       stats.states.base.bothHand + stats.states.base.oneHand} / 980
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : null}
 

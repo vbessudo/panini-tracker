@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { SECTIONS, STICKERS } from '@/data/panini-stickers'
@@ -9,7 +9,7 @@ import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { Owner, Assignment } from '@/lib/supabase'
-import { Search, X, Plus, Trash2 } from 'lucide-react'
+import { Search, X, Trash2, ChevronDown } from 'lucide-react'
 
 // ── WC group structure (shared) ───────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ const WC_GROUP_LABELS: Record<string,string> = {
 
 type InvRow = {
   id: string; sticker_code: string; owner: Owner; assignment: Assignment
-  stickers: { section: string; section_label: string; display_name: string; number: number }
+  stickers: { section: string; section_label: string; display_name: string; number: number; is_foil: boolean }
 }
 
 function useInventory() {
@@ -32,7 +32,7 @@ function useInventory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('inventory')
-        .select('*, stickers(section, section_label, display_name, number)')
+        .select('*, stickers(section, section_label, display_name, number, is_foil)')
         .order('sticker_code')
       if (error) throw error
       return data as InvRow[]
@@ -227,33 +227,109 @@ function Transferencias() {
   )
 }
 
+
 // ── TAB 2: Intercambios ───────────────────────────────────────────────────────
 
 type PendingMona = { code: string; display_name: string; section: string }
 
-function MiniSectionPicker({ onPick }: { onPick: (code: string) => void }) {
-  const [search, setSearch] = useState('')
-  const filtered = SECTIONS.filter(s =>
-    !search || s.code.toLowerCase().includes(search.toLowerCase()) || s.label.toLowerCase().includes(search.toLowerCase())
-  )
-  return (
-    <div>
-      <div className="relative mb-2">
-        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar sección..."
-          className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none" />
-      </div>
-      <div className="max-h-40 overflow-y-auto space-y-0.5">
-        {filtered.map(s => (
-          <button key={s.code} onClick={() => onPick(s.code)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg active:bg-primary/10 text-left">
-            <span className="font-mono font-bold text-xs text-gray-400 w-7">{s.code}</span>
-            <span className="text-sm text-gray-700">{s.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
+// Tradeable pool entry (deduplicated by code, may hold multiple inventory rows)
+type TradeEntry = {
+  sticker_code: string
+  display_name: string
+  number: number
+  is_foil: boolean
+  rows: InvRow[]          // all tradeable copies of this code
+  count: number
+  owners: Owner[]         // who physically owns each copy
+  reasons: string[]       // why it's tradeable ('repetida' | 'paul_deck' | 'principal_done')
+}
+
+type TradeCountry = {
+  sectionCode: string
+  sectionLabel: string
+  entries: TradeEntry[]
+  totalCopies: number
+}
+
+type TradeGroup = {
+  groupId: string
+  groupLabel: string
+  countries: TradeCountry[]
+}
+
+function buildTradeStructure(
+  inventory: InvRow[],
+  slots: Record<string, string>,   // "code-album" → status
+): TradeGroup[] {
+  // Determine which rows are tradeable
+  const tradeable = inventory.filter(r => {
+    // Rule 1: explicitly a repetida
+    if (r.assignment === 'Repetida') return true
+    // Rule 2: Paul's deck is always available
+    if (r.owner === 'Paul') return true
+    // Rule 3: Principal is already pegada — on-hand copies are surplus
+    if (slots[`${r.sticker_code}-Principal`] === 'Pegada') return true
+    return false
+  })
+
+  // Deduplicate by sticker_code
+  const byCode = new Map<string, TradeEntry>()
+  for (const r of tradeable) {
+    const existing = byCode.get(r.sticker_code)
+    const reason = r.assignment === 'Repetida' ? 'repetida'
+      : r.owner === 'Paul' ? 'paul_deck' : 'principal_done'
+    if (existing) {
+      existing.rows.push(r)
+      existing.count++
+      if (!existing.owners.includes(r.owner)) existing.owners.push(r.owner)
+      if (!existing.reasons.includes(reason)) existing.reasons.push(reason)
+    } else {
+      const mona = STICKERS.find(s => s.code === r.sticker_code)
+      byCode.set(r.sticker_code, {
+        sticker_code: r.sticker_code,
+        display_name: r.stickers?.display_name ?? r.sticker_code,
+        number: r.stickers?.number ?? 0,
+        is_foil: r.stickers?.is_foil ?? false,
+        rows: [r],
+        count: 1,
+        owners: [r.owner],
+        reasons: [reason],
+      })
+    }
+  }
+
+  // Group by WC group → country
+  const bySec: Record<string, TradeEntry[]> = {}
+  for (const entry of Array.from(byCode.values())) {
+    const mona = STICKERS.find(s => s.code === entry.sticker_code)
+    const sec = mona?.section ?? '??'
+    if (!bySec[sec]) bySec[sec] = []
+    bySec[sec].push(entry)
+  }
+  for (const entries of Object.values(bySec)) {
+    entries.sort((a, b) => a.number - b.number)
+  }
+
+  return WC_GROUP_ORDER.flatMap(groupId => {
+    const groupSections = SECTIONS.filter(
+      s => (s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')) === groupId && bySec[s.code]
+    )
+    if (!groupSections.length) return []
+    const countries: TradeCountry[] = groupSections.map(s => ({
+      sectionCode: s.code,
+      sectionLabel: s.label,
+      entries: bySec[s.code],
+      totalCopies: bySec[s.code].reduce((sum, e) => sum + e.count, 0),
+    }))
+    return [{ groupId, groupLabel: WC_GROUP_LABELS[groupId], countries }]
+  })
+}
+
+// Reason labels
+const REASON_LABEL: Record<string, string> = {
+  repetida: '🔄 Repetida',
+  paul_deck: '🟧 Mazo Paul',
+  principal_done: '🅐 Principal ✓',
 }
 
 function Intercambios() {
@@ -261,37 +337,50 @@ function Intercambios() {
   const qc = useQueryClient()
   const { data: inventory = [] } = useInventory()
 
-  const [trader, setTrader]       = useState<Owner>(currentUser ?? 'Simon')
-  const [dasSelected, setDasSelected] = useState<Set<string>>(new Set()) // inventory IDs to give away
-  const [recibesQueue, setRecibesQueue] = useState<PendingMona[]>([])    // monas to receive
+  // Fetch album slots to determine which Principal slots are pegada
+  const { data: slotsData } = useQuery({
+    queryKey: ['all-slots-status'],
+    queryFn: async () => {
+      const { data } = await supabase.from('album_slots').select('sticker_code, album, status')
+      return (data ?? []).reduce<Record<string, string>>((acc, r) => {
+        acc[`${r.sticker_code}-${r.album}`] = r.status; return acc
+      }, {})
+    },
+  })
+  const slots = slotsData ?? {}
 
-  // For the "recibes" mini-adder
-  const [addStep, setAddStep]     = useState<'idle' | 'section' | 'number'>('idle')
+  const [dasSelected, setDasSelected] = useState<Set<string>>(new Set()) // inventory row IDs
+  const [recibesQueue, setRecibesQueue] = useState<PendingMona[]>([])
+  const [dasExpanded, setDasExpanded] = useState<Set<string>>(new Set())
   const [addSection, setAddSection] = useState<string | null>(null)
-  const [addNum, setAddNum]       = useState('')
-
+  const [addSearch, setAddSearch] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const myReps = inventory.filter(r => r.owner === trader && r.assignment === 'Repetida')
-  const toggleDas = (id: string) =>
-    setDasSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const tradeStructure = buildTradeStructure(inventory, slots)
+  const totalTradeable = tradeStructure.reduce((sum, g) =>
+    sum + g.countries.reduce((s2, c) => s2 + c.totalCopies, 0), 0)
 
-  // Add a mona to the recibes queue
-  const handleAddRecibe = () => {
-    if (!addSection) return
-    const n = parseInt(addNum, 10)
-    const validNumbers = STICKERS.filter(s => s.section === addSection).map(s => s.number)
-    if (isNaN(n) || !validNumbers.includes(n)) { toast.error('Número inválido'); return }
-    const code = addSection === 'FWC' && n === 0 ? 'FWC00' : addSection + String(n)
-    const mona = STICKERS.find(s => s.code === code)
-    if (!mona) return
-    setRecibesQueue(prev => [...prev, { code, display_name: mona.display_name, section: mona.section }])
-    setAddNum('')
-    setAddStep('number') // stay on number step for quick sequential entry
+  const toggleDasExpand = (code: string) =>
+    setDasExpanded(prev => { const s = new Set(prev); s.has(code) ? s.delete(code) : s.add(code); return s })
+
+  // Select/deselect all copies of a code
+  const toggleCode = (entry: TradeEntry) => {
+    const ids = entry.rows.map(r => r.id)
+    const allSelected = ids.every(id => dasSelected.has(id))
+    setDasSelected(prev => {
+      const s = new Set(prev)
+      if (allSelected) ids.forEach(id => s.delete(id))
+      else ids.forEach(id => s.add(id))
+      return s
+    })
   }
 
-  const removeRecibe = (idx: number) =>
-    setRecibesQueue(prev => prev.filter((_, i) => i !== idx))
+  const removeRecibe = (idx: number) => setRecibesQueue(prev => prev.filter((_, i) => i !== idx))
+
+  const filteredSections = SECTIONS.filter(s =>
+    !addSearch || s.code.toLowerCase().includes(addSearch.toLowerCase()) ||
+    s.label.toLowerCase().includes(addSearch.toLowerCase())
+  )
 
   const handleConfirm = async () => {
     if (dasSelected.size === 0 && recibesQueue.length === 0) return
@@ -300,221 +389,287 @@ function Intercambios() {
       const dasIds = Array.from(dasSelected)
       const dasCodes = inventory.filter(r => dasIds.includes(r.id)).map(r => r.sticker_code)
 
-      // 1. Remove "das" from inventory
       if (dasIds.length) {
         const { error } = await supabase.from('inventory').delete().in('id', dasIds)
         if (error) throw error
         for (const code of dasCodes) {
           await supabase.from('events').insert({
             actor: currentUser, kind: 'trade_away',
-            payload: { code, from: 'Repetida', actor: currentUser, trade_type: 'external' },
+            payload: { code, from: 'trade', actor: currentUser },
           })
         }
       }
 
-      // 2. Add "recibes" via routing algorithm
       const received: string[] = []
       for (const mona of recibesQueue) {
         try {
-          const assignment = await addMona(mona.code, trader, currentUser!)
+          const assignment = await addMona(mona.code, currentUser!, currentUser!)
           const emoji = assignment === 'Principal' ? '🅐' : assignment === 'Secundario' ? '🅑' : '🔄'
           received.push(`${emoji} ${mona.code}`)
-        } catch (err) {
-          console.error('Error adding', mona.code, err)
-        }
+        } catch (err) { console.error('Error adding', mona.code, err) }
       }
 
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate([30, 50, 30])
 
       const summary = []
-      if (dasIds.length) summary.push(`Diste ${dasIds.length} mona${dasIds.length > 1 ? 's' : ''}`)
-      if (received.length) summary.push(`Recibiste ${received.length}: ${received.join(' ')}`)
+      if (dasIds.length)    summary.push(`Diste ${dasIds.length} mona${dasIds.length > 1 ? 's' : ''}`)
+      if (received.length)  summary.push(`Recibiste ${received.length}: ${received.join(' ')}`)
       toast.success('✅ Intercambio registrado', { description: summary.join(' · ') })
 
       setDasSelected(new Set())
       setRecibesQueue([])
-      setAddStep('idle')
       setAddSection(null)
-      setAddNum('')
       qc.invalidateQueries({ queryKey: ['inventory-cambios'] })
       qc.invalidateQueries({ queryKey: ['inventory'] })
+      qc.invalidateQueries({ queryKey: ['inventory-mazo'] })
       qc.invalidateQueries({ queryKey: ['album-stats'] })
       qc.invalidateQueries({ queryKey: ['recent-events'] })
+      qc.invalidateQueries({ queryKey: ['all-slots-status'] })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       toast.error('Error en el intercambio', { description: msg })
     } finally { setSubmitting(false) }
   }
 
-  const validNums = addSection ? STICKERS.filter(s => s.section === addSection).map(s => s.number) : []
-  const minN = validNums.length ? Math.min(...validNums) : 1
-  const maxN = validNums.length ? Math.max(...validNums) : 20
+  const validNums = addSection
+    ? STICKERS.filter(s => s.section === addSection).map(s => s.number)
+    : []
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="px-4 pt-3 pb-2 bg-white border-b border-gray-100">
-        <p className="text-xs text-gray-400 mb-2 font-medium">¿Quién intercambia?</p>
-        <div className="flex gap-2">
-          {(['Simon', 'Paul'] as Owner[]).map(u => (
-            <button key={u} onClick={() => { setTrader(u); setDasSelected(new Set()) }}
-              className={cn('flex-1 py-2 rounded-xl font-bold text-sm transition-all active:scale-95',
-                trader === u ? u === 'Simon' ? 'bg-simon text-white' : 'bg-paul text-white'
-                  : 'bg-gray-100 text-gray-500')}>
-              {u === 'Simon' ? '🟦' : '🟧'} {u}
-            </button>
-          ))}
+
+      {/* ── DAS section ──────────────────────────────────────────────────── */}
+      <div className="px-4 pt-4 pb-2">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h3 className="font-bold text-gray-800">
+              🤲 Das ({dasSelected.size} seleccionada{dasSelected.size !== 1 ? 's' : ''})
+            </h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {totalTradeable} disponibles · repetidas + mazo de Paul + principal ya pegada
+            </p>
+          </div>
+          {dasSelected.size > 0 && (
+            <button onClick={() => setDasSelected(new Set())}
+              className="text-xs text-gray-400 font-semibold active:opacity-70">Limpiar</button>
+          )}
         </div>
+
+        {tradeStructure.length === 0 ? (
+          <div className="card text-center py-8">
+            <p className="text-sm text-gray-400">No hay monas disponibles para intercambiar.</p>
+            <p className="text-xs text-gray-300 mt-1">Agrega monas o pega las del álbum Principal primero.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {tradeStructure.map(({ groupId, groupLabel, countries }) => (
+              <div key={groupId}>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{groupLabel}</p>
+                <div className="space-y-1">
+                  {countries.map(country => {
+                    const isExpanded = dasExpanded.has(country.sectionCode)
+                    const selectedInCountry = country.entries.reduce((sum, e) =>
+                      sum + e.rows.filter(r => dasSelected.has(r.id)).length, 0)
+
+                    return (
+                      <div key={country.sectionCode}
+                        className={cn('rounded-2xl overflow-hidden border transition-all',
+                          isExpanded ? 'border-primary/30' : 'border-gray-100 bg-white')}>
+
+                        {/* Country header */}
+                        <button onClick={() => toggleDasExpand(country.sectionCode)}
+                          className={cn('w-full flex items-center justify-between px-4 py-3',
+                            isExpanded ? 'bg-primary/5' : 'bg-white active:bg-gray-50')}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono font-bold text-xs text-gray-400 shrink-0">{country.sectionCode}</span>
+                            <span className="font-semibold text-sm text-gray-800 truncate">{country.sectionLabel}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            {selectedInCountry > 0 && (
+                              <span className="text-[10px] font-bold bg-primary text-white px-2 py-0.5 rounded-full">
+                                {selectedInCountry} sel.
+                              </span>
+                            )}
+                            <span className="text-xs text-gray-400 tabular-nums">{country.totalCopies} disp.</span>
+                            <ChevronDown size={14} className={cn('text-gray-400 transition-transform duration-200',
+                              isExpanded && 'rotate-180')} />
+                          </div>
+                        </button>
+
+                        {/* Expanded entries */}
+                        {isExpanded && (
+                          <div className="border-t border-primary/10 bg-white divide-y divide-gray-50">
+                            {country.entries.map(entry => {
+                              const allSelected = entry.rows.every(r => dasSelected.has(r.id))
+                              const someSelected = entry.rows.some(r => dasSelected.has(r.id))
+                              const selectedCount = entry.rows.filter(r => dasSelected.has(r.id)).length
+
+                              return (
+                                <button key={entry.sticker_code} onClick={() => toggleCode(entry)}
+                                  className={cn('w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left',
+                                    allSelected ? 'bg-primary/5' : someSelected ? 'bg-primary/3' : 'active:bg-gray-50')}>
+                                  {/* Checkbox */}
+                                  <div className={cn('w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+                                    allSelected ? 'bg-primary border-primary'
+                                    : someSelected ? 'bg-primary/40 border-primary/40'
+                                    : 'border-gray-300')}>
+                                    {(allSelected || someSelected) && (
+                                      <span className="text-white text-[9px] font-bold">✓</span>
+                                    )}
+                                  </div>
+
+                                  {/* Code + name */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-mono font-bold text-sm text-gray-800">{entry.sticker_code}</span>
+                                      {entry.is_foil && <span className="text-[9px] text-amber-500">✦</span>}
+                                    </div>
+                                    <p className="text-xs text-gray-400 truncate">{entry.display_name}</p>
+                                  </div>
+
+                                  {/* Right side: reasons + count */}
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {entry.reasons.map(r => (
+                                      <span key={r} className="text-[9px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                        {REASON_LABEL[r]}
+                                      </span>
+                                    ))}
+                                    {/* Owner dots */}
+                                    {entry.owners.includes('Simon') && (
+                                      <span className="w-2 h-2 rounded-full bg-simon inline-block" />
+                                    )}
+                                    {entry.owners.includes('Paul') && (
+                                      <span className="w-2 h-2 rounded-full bg-paul inline-block" />
+                                    )}
+                                    {/* Count if > 1 */}
+                                    {entry.count > 1 && (
+                                      <span className={cn('text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[22px] text-center',
+                                        selectedCount > 0 ? 'bg-primary text-white' : 'bg-amber-100 text-amber-700')}>
+                                        {selectedCount > 0 ? `${selectedCount}/${entry.count}` : `×${entry.count}`}
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="px-4 py-4 space-y-5">
-        {/* DAS section */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-gray-800">🤲 Das ({dasSelected.size} seleccionada{dasSelected.size !== 1 ? 's' : ''})</h3>
-            {myReps.length > 0 && (
-              <button onClick={() => setDasSelected(new Set(myReps.map(r => r.id)))}
-                className="text-xs text-primary font-semibold active:opacity-70">Todas</button>
-            )}
-          </div>
+      {/* ── RECIBES section ───────────────────────────────────────────────── */}
+      <div className="px-4 py-3">
+        <h3 className="font-bold text-gray-800 mb-2">
+          🎁 Recibes ({recibesQueue.length} mona{recibesQueue.length !== 1 ? 's' : ''})
+        </h3>
 
-          {myReps.length === 0 ? (
-            <p className="text-sm text-gray-400">{trader} no tiene repetidas para dar.</p>
-          ) : (
-            <div className="space-y-1 max-h-52 overflow-y-auto">
-              {groupByWCGroup(myReps).map(({ groupId, groupLabel, sections }) => (
-                <div key={groupId}>
-                  <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest py-1">{groupLabel}</p>
-                  {sections.map(({ sec, label, rows }) => (
-                    <div key={sec} className="mb-1">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">{label}</p>
-                      {rows.map(r => {
-                        const isSel = dasSelected.has(r.id)
-                        return (
-                          <button key={r.id} onClick={() => toggleDas(r.id)}
-                            className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors',
-                              isSel ? 'bg-red-50 border border-red-200' : 'active:bg-gray-50')}>
-                            <div className={cn('w-4 h-4 rounded border-2 flex items-center justify-center shrink-0',
-                              isSel ? 'bg-red-500 border-red-500' : 'border-gray-300')}>
-                              {isSel && <span className="text-white text-[9px]">✓</span>}
-                            </div>
-                            <span className="font-mono font-bold text-xs text-gray-800">{r.sticker_code}</span>
-                            <span className="text-xs text-gray-400 truncate">{r.stickers?.display_name}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  ))}
+        {/* Queued monas */}
+        {recibesQueue.length > 0 && (
+          <div className="space-y-1 mb-3">
+            {recibesQueue.map((m, i) => (
+              <div key={i} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                <div>
+                  <span className="font-mono font-bold text-sm text-gray-800">{m.code}</span>
+                  <span className="text-xs text-gray-500 ml-2">{m.display_name}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* RECIBES section */}
-        <div className="card">
-          <h3 className="font-bold text-gray-800 mb-3">🎁 Recibes ({recibesQueue.length} mona{recibesQueue.length !== 1 ? 's' : ''})</h3>
-
-          {/* Queued monas */}
-          {recibesQueue.length > 0 && (
-            <div className="space-y-1 mb-3">
-              {recibesQueue.map((m, i) => (
-                <div key={i} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
-                  <div>
-                    <span className="font-mono font-bold text-sm text-gray-800">{m.code}</span>
-                    <span className="text-xs text-gray-500 ml-2">{m.display_name}</span>
-                  </div>
-                  <button onClick={() => removeRecibe(i)} className="text-red-400 active:text-red-600 p-0.5">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Mini adder */}
-          {addStep === 'idle' && (
-            <button onClick={() => setAddStep('section')}
-              className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-200
-                         rounded-xl py-3 text-sm text-gray-400 font-semibold active:border-primary active:text-primary transition-colors">
-              <Plus size={16} /> Agregar mona recibida
-            </button>
-          )}
-
-          {addStep === 'section' && (
-            <div className="border border-gray-200 rounded-xl p-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-bold text-gray-600">Elige la sección</p>
-                <button onClick={() => setAddStep('idle')} className="text-gray-400"><X size={14} /></button>
+                <button onClick={() => removeRecibe(i)} className="text-red-400 active:text-red-600 p-1">
+                  <Trash2 size={14} />
+                </button>
               </div>
-              <MiniSectionPicker onPick={(code) => { setAddSection(code); setAddNum(''); setAddStep('number') }} />
-            </div>
-          )}
-
-          {addStep === 'number' && addSection && (
-            <div className="border border-gray-200 rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-gray-600">
-                  <button onClick={() => setAddStep('section')} className="text-primary mr-1">‹</button>
-                  {SECTIONS.find(s => s.code === addSection)?.label} · #{' '}
-                  <span className="text-primary">{addNum || '?'}</span>
-                  <span className="text-gray-400 ml-1">({minN}–{maxN})</span>
-                </p>
-                <button onClick={() => { setAddStep('idle'); setAddSection(null); setAddNum('') }} className="text-gray-400"><X size={14} /></button>
-              </div>
-              <div className="grid grid-cols-5 gap-1">
-                {validNums.map(n => {
-                  const displayN = n === 0 ? '00' : String(n)
-                  const code = addSection === 'FWC' && n === 0 ? 'FWC00' : addSection + String(n)
-                  const alreadyQueued = recibesQueue.some(m => m.code === code)
-                  return (
-                    <button key={n} disabled={alreadyQueued}
-                      onClick={() => {
-                        setAddNum(displayN)
-                        const mona = STICKERS.find(s => s.code === code)
-                        if (mona) {
-                          setRecibesQueue(prev => [...prev, { code, display_name: mona.display_name, section: mona.section }])
-                          setAddNum('')
-                        }
-                      }}
-                      className={cn('aspect-square rounded-lg text-xs font-bold border transition-all',
-                        alreadyQueued ? 'bg-green-100 border-green-300 text-green-600 cursor-default'
-                          : 'bg-gray-100 border-gray-200 text-gray-700 active:bg-primary active:text-white active:border-primary')}>
-                      {displayN}
-                    </button>
-                  )
-                })}
-              </div>
-              <button onClick={() => setAddStep('section')}
-                className="w-full text-xs text-primary font-semibold py-1.5 active:opacity-70">
-                + Agregar otra sección
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Summary + confirm */}
-        {(dasSelected.size > 0 || recibesQueue.length > 0) && (
-          <div className="card bg-primary/5 border-primary/20">
-            <p className="text-sm font-bold text-primary mb-1">Resumen del intercambio</p>
-            <p className="text-xs text-gray-600">
-              {dasSelected.size > 0 && `🤲 Das: ${dasSelected.size} mona${dasSelected.size > 1 ? 's' : ''}`}
-              {dasSelected.size > 0 && recibesQueue.length > 0 && ' · '}
-              {recibesQueue.length > 0 && `🎁 Recibes: ${recibesQueue.length} mona${recibesQueue.length > 1 ? 's' : ''}`}
-            </p>
-            {dasSelected.size > 0 && recibesQueue.length > 0 && dasSelected.size !== recibesQueue.length && (
-              <p className="text-[11px] text-amber-600 mt-1 font-medium">
-                Intercambio {dasSelected.size}-por-{recibesQueue.length} — OK ✓
-              </p>
-            )}
+            ))}
           </div>
         )}
 
-        <button onClick={handleConfirm}
-          disabled={submitting || (dasSelected.size === 0 && recibesQueue.length === 0)}
-          className="btn-primary w-full py-4 text-base disabled:opacity-50 mb-4">
-          {submitting ? 'Registrando…' : '✓ Confirmar intercambio'}
-        </button>
+        {/* Section picker */}
+        {!addSection ? (
+          <div className="space-y-2">
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={addSearch} onChange={e => setAddSearch(e.target.value)}
+                placeholder="Buscar sección para agregar..."
+                className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto">
+              {filteredSections.map(s => (
+                <button key={s.code} onClick={() => { setAddSection(s.code); setAddSearch('') }}
+                  className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-3 py-2.5 active:bg-primary/5 text-left">
+                  <span className="font-mono font-bold text-xs text-gray-400 w-7 shrink-0">{s.code}</span>
+                  <span className="text-xs font-medium text-gray-700 truncate">{s.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* Number grid for selected section */
+          <div className="border border-gray-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-primary/5 border-b border-primary/10">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setAddSection(null)} className="text-primary text-sm">‹</button>
+                <span className="font-bold text-sm text-gray-800">
+                  {SECTIONS.find(s => s.code === addSection)?.label}
+                </span>
+              </div>
+              <button onClick={() => setAddSection(null)} className="text-gray-400"><X size={14} /></button>
+            </div>
+            <div className="p-3 grid grid-cols-5 gap-1.5">
+              {validNums.map(n => {
+                const displayN = n === 0 ? '00' : String(n)
+                const code = addSection === 'FWC' && n === 0 ? 'FWC00' : addSection + String(n)
+                const alreadyQueued = recibesQueue.some(m => m.code === code)
+                const monaData = STICKERS.find(s => s.code === code)
+                return (
+                  <button key={n} disabled={alreadyQueued}
+                    onClick={() => {
+                      if (monaData) {
+                        setRecibesQueue(prev => [...prev, {
+                          code, display_name: monaData.display_name, section: monaData.section
+                        }])
+                      }
+                    }}
+                    className={cn('aspect-square rounded-xl text-xs font-bold border-2 flex items-center justify-center transition-all',
+                      alreadyQueued
+                        ? 'bg-green-100 border-green-400 text-green-700'
+                        : 'bg-gray-100 border-gray-200 text-gray-700 active:bg-primary active:text-white active:border-primary')}>
+                    {alreadyQueued ? '✓' : displayN}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* ── Summary + Confirm ─────────────────────────────────────────────── */}
+      {(dasSelected.size > 0 || recibesQueue.length > 0) && (
+        <div className="px-4 pb-2">
+          <div className="card bg-primary/5 border-primary/20 mb-3">
+            <p className="text-sm font-bold text-primary mb-0.5">Resumen</p>
+            <p className="text-xs text-gray-600">
+              {dasSelected.size > 0 && `🤲 Das: ${dasSelected.size} mona${dasSelected.size > 1 ? 's' : ''}`}
+              {dasSelected.size > 0 && recibesQueue.length > 0 && '  ·  '}
+              {recibesQueue.length > 0 && `🎁 Recibes: ${recibesQueue.length} mona${recibesQueue.length > 1 ? 's' : ''}`}
+            </p>
+            {dasSelected.size !== recibesQueue.length && dasSelected.size > 0 && recibesQueue.length > 0 && (
+              <p className="text-[11px] text-amber-600 mt-1 font-medium">
+                Intercambio {dasSelected.size}-por-{recibesQueue.length} ✓
+              </p>
+            )}
+          </div>
+          <button onClick={handleConfirm} disabled={submitting}
+            className="btn-primary w-full py-4 text-base disabled:opacity-50">
+            {submitting ? 'Registrando…' : '✓ Confirmar intercambio'}
+          </button>
+        </div>
+      )}
+
+      <div className="h-6" /> {/* bottom padding */}
     </div>
   )
 }
