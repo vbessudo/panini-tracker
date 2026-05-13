@@ -147,7 +147,7 @@ function CellSheet({
         {slot.status === 'Falta' && relevantInv.length === 0 && (
           <div className="space-y-3">
             <div className="chip-falta inline-block">Falta</div>
-            <p className="text-sm text-gray-500">Todavía no tenés esta figurita.</p>
+            <p className="text-sm text-gray-500">Todavía no tienes esta mona.</p>
           </div>
         )}
 

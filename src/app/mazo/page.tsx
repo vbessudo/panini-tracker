@@ -169,7 +169,7 @@ function RowActionSheet({
               onClick={async () => { await moveRow(inv, 'Repetida', actor, slots, qc); onClose() }}
               className="w-full bg-gray-100 text-gray-800 font-semibold rounded-xl py-3 active:scale-95 transition-transform"
             >
-              🔄 Mover a Repetidas
+              🔄 Mover a Repetidass
             </button>
           )}
           <button
@@ -272,7 +272,7 @@ export default function MazoPage() {
               {tab === 'pegar' && (
                 <div className="space-y-4">
                   {forPasting.length === 0 ? (
-                    <p className="text-center text-gray-400 py-12 text-sm">Mazo vacío — ¡agregá figuritas!</p>
+                    <p className="text-center text-gray-400 py-12 text-sm">Mazo vacío — ¡agrega monas!</p>
                   ) : (
                     <>
                       {simonPasting.length > 0 && (
@@ -351,7 +351,7 @@ export default function MazoPage() {
 
                   {filteredReps.length === 0 ? (
                     <p className="text-center text-gray-400 py-12 text-sm">
-                      {tab === 'otro' ? `${otherUser} no tiene repetidas` : 'No tenés repetidas'}
+                      {tab === 'otro' ? `${otherUser} no tiene repetidas` : 'No tienes repetidas'}
                     </p>
                   ) : (
                     Object.entries(groupBySection(filteredReps)).map(([sec, rows]) => (

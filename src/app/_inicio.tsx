@@ -18,7 +18,7 @@ function formatEventText(event: { actor: string; kind: string; payload: Record<s
   const from = payload.from as string ?? ''
 
   switch (kind) {
-    case 'add':      return `${actor} agregó ${code} → ${assignment}`
+    case 'add':      return `${actor} agregó mona ${code} → ${assignment}`
     case 'paste':    return `${actor} pegó ${code} en ${album}`
     case 'unpaste':  return `${actor} despegó ${code} de ${album}`
     case 'move':     return `${actor} movió ${code} de ${from} a ${to}`
@@ -147,7 +147,7 @@ export default function InicioInner() {
           href="/agregar"
           className="btn-primary w-full flex items-center justify-center gap-2 text-center py-4 text-lg"
         >
-          ➕ Agregar stickers
+          ➕ Agregar monas
         </Link>
 
         {/* Activity feed */}
@@ -175,7 +175,7 @@ export default function InicioInner() {
             </div>
           ) : (
             <p className="text-sm text-gray-400 text-center py-4">
-              Todavía no hay actividad. ¡Agregá tu primer sticker!
+              Todavía no hay actividad. ¡Agrega tu primera mona!
             </p>
           )}
         </div>

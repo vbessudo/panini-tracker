@@ -92,7 +92,7 @@ export function PasscodeGate() {
       <div className="text-center mb-10">
         <div className="text-5xl mb-4">⚽</div>
         <h1 className="text-white text-2xl font-bold">Panini 2026</h1>
-        <p className="text-white/70 mt-1 text-sm">Ingresá el código familiar</p>
+        <p className="text-white/70 mt-1 text-sm">Ingresa el código familiar</p>
       </div>
 
       {/* Dots indicator */}

@@ -143,7 +143,7 @@ export default function SettingsPage() {
                   Solo vaciar el mazo (inventario)
                 </button>
                 <div className="space-y-2">
-                  <p className="text-xs text-red-500">Para reset total (borra mazo + album + eventos), escribí <strong>RESET2026</strong>:</p>
+                  <p className="text-xs text-red-500">Para reset total (borra mazo + album + eventos), escribe <strong>RESET2026</strong>:</p>
                   <input
                     value={resetCode}
                     onChange={e => setResetCode(e.target.value)}

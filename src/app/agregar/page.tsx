@@ -8,30 +8,31 @@ import { SECTIONS, STICKERS } from '@/data/panini-stickers'
 import type { Owner, Assignment } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
-import { RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ── Routing algorithm (spec §6) ──────────────────────────────────────────────
 
-async function addSticker(code: string, owner: Owner, actor: Owner): Promise<Assignment> {
-  // Fetch current album slot statuses
-  const { data: slots } = await supabase
+async function addMona(code: string, owner: Owner, actor: Owner): Promise<Assignment> {
+  const { data: slots, error: slotsErr } = await supabase
     .from('album_slots')
     .select('album, status')
     .eq('sticker_code', code)
 
-  const principalSlot = slots?.find(s => s.album === 'Principal')
-  const secundarioSlot = slots?.find(s => s.album === 'Secundario')
-  const principalPegada = principalSlot?.status === 'Pegada'
+  if (slotsErr) throw new Error(`Error leyendo álbum: ${slotsErr.message}`)
+
+  const principalSlot    = slots?.find(s => s.album === 'Principal')
+  const secundarioSlot   = slots?.find(s => s.album === 'Secundario')
+  const principalPegada  = principalSlot?.status === 'Pegada'
   const secundarioPegada = secundarioSlot?.status === 'Pegada'
 
-  // Fetch current inventory for this code
-  const { data: inv } = await supabase
+  const { data: inv, error: invReadErr } = await supabase
     .from('inventory')
     .select('assignment')
     .eq('sticker_code', code)
 
-  const principalReserved = inv?.some(r => r.assignment === 'Principal') ?? false
+  if (invReadErr) throw new Error(`Error leyendo inventario: ${invReadErr.message}`)
+
+  const principalReserved  = inv?.some(r => r.assignment === 'Principal') ?? false
   const secundarioReserved = inv?.some(r => r.assignment === 'Secundario') ?? false
 
   let assignment: Assignment
@@ -43,21 +44,19 @@ async function addSticker(code: string, owner: Owner, actor: Owner): Promise<Ass
     assignment = 'Repetida'
   }
 
-  // Insert inventory row
-  const { data: invRow, error: invErr } = await supabase
+  const { error: invErr } = await supabase
     .from('inventory')
     .insert({ sticker_code: code, owner, assignment, added_by: actor })
-    .select('id')
-    .single()
 
-  if (invErr) throw invErr
+  if (invErr) throw new Error(`Error guardando mona: ${invErr.message} (code: ${invErr.code})`)
 
-  // Log event
-  await supabase.from('events').insert({
+  const { error: evtErr } = await supabase.from('events').insert({
     actor,
     kind: 'add',
     payload: { code, owner, assignment },
   })
+
+  if (evtErr) console.warn('Event log failed (non-critical):', evtErr.message)
 
   return assignment
 }
@@ -67,7 +66,6 @@ async function addSticker(code: string, owner: Owner, actor: Owner): Promise<Ass
 const GROUPS = ['FIFA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'Bonus']
 
 function SectionPicker({ onPick }: { onPick: (code: string) => void }) {
-  // Group sections
   const byGroup = SECTIONS.reduce<Record<string, typeof SECTIONS>>((acc, s) => {
     const g = s.group ?? (s.code === 'FWC' ? 'FIFA' : 'Bonus')
     if (!acc[g]) acc[g] = []
@@ -122,28 +120,19 @@ function NumberInput({
   sectionCode: string
   currentUser: Owner
   onBack: () => void
-  onAdded: (inventoryId: string, code: string, assignment: Assignment, owner: Owner) => void
+  onAdded: (code: string, assignment: Assignment, owner: Owner) => void
 }) {
-  const [numStr, setNumStr] = useState('')
-  const [owner, setOwner] = useState<Owner>(currentUser)
+  const [numStr, setNumStr]         = useState('')
+  const [owner, setOwner]           = useState<Owner>(currentUser)
   const [submitting, setSubmitting] = useState(false)
-  const [shake, setShake] = useState(false)
+  const [shake, setShake]           = useState(false)
 
-  const section = SECTIONS.find(s => s.code === sectionCode)!
-
-  // Valid range
-  const validNumbers = STICKERS
-    .filter(s => s.section === sectionCode)
-    .map(s => s.number)
+  const section      = SECTIONS.find(s => s.code === sectionCode)!
+  const validNumbers = STICKERS.filter(s => s.section === sectionCode).map(s => s.number)
   const minN = Math.min(...validNumbers)
   const maxN = Math.max(...validNumbers)
 
-  const handleDigit = (d: string) => {
-    if (numStr.length >= 2) return
-    const next = numStr + d
-    setNumStr(next)
-  }
-
+  const handleDigit  = (d: string) => { if (numStr.length >= 2) return; setNumStr(prev => prev + d) }
   const handleDelete = () => setNumStr(prev => prev.slice(0, -1))
 
   const handleSubmit = async () => {
@@ -155,35 +144,28 @@ function NumberInput({
       return
     }
 
-    const code = sectionCode + (sectionCode === 'FWC' && n === 0 ? '00' : String(n))
-    const sticker = STICKERS.find(s => s.code === code)
-    if (!sticker) {
-      toast.error(`Sticker ${code} no encontrado`)
+    const code = sectionCode === 'FWC' && n === 0 ? 'FWC00' : sectionCode + String(n)
+    const mona = STICKERS.find(s => s.code === code)
+    if (!mona) {
+      toast.error(`Mona ${code} no encontrada en el dataset`)
       return
     }
 
     setSubmitting(true)
     try {
-      const assignment = await addSticker(code, owner, currentUser)
+      const assignment = await addMona(code, owner, currentUser)
 
-      // Haptic
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate(20)
-      }
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(20)
 
-      const assignEmoji = assignment === 'Principal' ? '🅐' : assignment === 'Secundario' ? '🅑' : '🔄'
-      toast.success(`${assignEmoji} ${code} → ${assignment} (${owner})`, {
-        description: sticker.display_name,
-      })
+      const emoji = assignment === 'Principal' ? '🅐' : assignment === 'Secundario' ? '🅑' : '🔄'
+      toast.success(`${emoji} ${code} → ${assignment} (${owner})`, { description: mona.display_name })
 
-      // Callback for recent-adds stack
-      onAdded('', code, assignment, owner)
-
-      // Clear number, keep section
+      onAdded(code, assignment, owner)
       setNumStr('')
     } catch (err) {
-      console.error(err)
-      toast.error('Error al agregar el sticker. Revisá tu conexión.')
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('addMona error:', msg)
+      toast.error('Error al agregar la mona', { description: msg })
     } finally {
       setSubmitting(false)
     }
@@ -191,7 +173,6 @@ function NumberInput({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Section header */}
       <div className="bg-primary px-4 py-3">
         <div className="flex items-center gap-2">
           <button onClick={onBack} className="text-white/70 active:text-white">‹ Sección</button>
@@ -199,10 +180,8 @@ function NumberInput({
         </div>
       </div>
 
-      {/* Number display */}
-      <div className={cn('flex-1 flex flex-col items-center justify-center gap-2 px-4',
-        shake && 'shake-anim')}>
-        <p className="text-gray-400 text-sm">Número del sticker</p>
+      <div className={cn('flex-1 flex flex-col items-center justify-center gap-2 px-4', shake && 'shake-anim')}>
+        <p className="text-gray-400 text-sm">Número de la mona</p>
         <div className={cn(
           'text-6xl font-bold tabular-nums min-h-[80px] flex items-center',
           numStr ? 'text-primary' : 'text-gray-200',
@@ -212,7 +191,6 @@ function NumberInput({
         </div>
         <p className="text-xs text-gray-400">Rango válido: {minN}–{maxN}</p>
 
-        {/* Owner toggle */}
         <div className="flex gap-2 mt-2">
           {(['Simon', 'Paul'] as Owner[]).map((u) => (
             <button
@@ -231,55 +209,37 @@ function NumberInput({
         </div>
       </div>
 
-      {/* Keypad */}
       <div className="px-4 pb-4">
         <div className="grid grid-cols-3 gap-2 mb-3">
           {DIGIT_KEYS.map((key) => {
             if (key === '') return <div key="empty" />
-            if (key === 'del') {
-              return (
-                <button
-                  key="del"
-                  onPointerDown={handleDelete}
-                  className="bg-gray-100 text-gray-700 rounded-2xl h-14 flex items-center justify-center
-                             text-xl active:bg-gray-200 transition-colors"
-                >
-                  ⌫
-                </button>
-              )
-            }
+            if (key === 'del') return (
+              <button key="del" onPointerDown={handleDelete}
+                className="bg-gray-100 text-gray-700 rounded-2xl h-14 flex items-center justify-center text-xl active:bg-gray-200 transition-colors">
+                ⌫
+              </button>
+            )
             return (
-              <button
-                key={key}
-                onPointerDown={() => handleDigit(key)}
-                className="bg-gray-100 text-gray-800 rounded-2xl h-14 flex items-center justify-center
-                           text-2xl font-semibold active:bg-gray-200 transition-colors"
-              >
+              <button key={key} onPointerDown={() => handleDigit(key)}
+                className="bg-gray-100 text-gray-800 rounded-2xl h-14 flex items-center justify-center text-2xl font-semibold active:bg-gray-200 transition-colors">
                 {key}
               </button>
             )
           })}
         </div>
 
-        {/* Submit */}
-        <button
-          onClick={handleSubmit}
-          disabled={submitting || numStr.length === 0}
-          className="btn-primary w-full text-lg py-4 disabled:opacity-50"
-        >
-          {submitting ? 'Agregando…' : '✓ Agregar'}
+        <button onClick={handleSubmit} disabled={submitting || numStr.length === 0}
+          className="btn-primary w-full text-lg py-4 disabled:opacity-50">
+          {submitting ? 'Guardando…' : '✓ Agregar mona'}
         </button>
       </div>
 
       <style>{`
         @keyframes panini-shake {
-          0%, 100% { transform: translateX(0); }
-          20% { transform: translateX(-8px); }
-          40% { transform: translateX(8px); }
-          60% { transform: translateX(-8px); }
-          80% { transform: translateX(8px); }
+          0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)}
+          40%{transform:translateX(8px)} 60%{transform:translateX(-8px)} 80%{transform:translateX(8px)}
         }
-        .shake-anim { animation: panini-shake 0.5s ease-in-out; }
+        .shake-anim{animation:panini-shake 0.5s ease-in-out}
       `}</style>
     </div>
   )
@@ -293,11 +253,9 @@ export default function AgregarPage() {
   const qc = useQueryClient()
 
   const handleAdded = useCallback(
-    (_id: string, code: string, assignment: Assignment, owner: Owner) => {
-      // Refresh stats
+    (code: string, assignment: Assignment, owner: Owner) => {
       qc.invalidateQueries({ queryKey: ['album-stats'] })
       qc.invalidateQueries({ queryKey: ['recent-events'] })
-      // Push to recent adds (id is '' here — we'd need to fetch it; simplified for now)
       pushRecentAdd({ inventoryId: '', code, assignment, owner, addedAt: Date.now() })
     },
     [qc, pushRecentAdd]
@@ -309,8 +267,8 @@ export default function AgregarPage() {
         {!selectedSection ? (
           <>
             <header className="bg-primary px-4 pt-safe-top pb-4">
-              <h1 className="text-white font-bold text-lg">Agregar stickers</h1>
-              <p className="text-white/70 text-sm">Elegí la sección</p>
+              <h1 className="text-white font-bold text-lg">Agregar monas</h1>
+              <p className="text-white/70 text-sm">Elige la sección</p>
             </header>
             <div className="overflow-y-auto flex-1">
               <SectionPicker onPick={setSelectedSection} />
