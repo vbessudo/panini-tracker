@@ -20,8 +20,8 @@ const config: Config = {
         tengo: '#D97706',    // amber-600
         falta: '#9CA3AF',    // gray-400
         // Owner colors
-        simon: '#2563EB',    // blue-600
-        paul: '#EA580C',     // orange-600
+        simon: '#60A5FA',    // blue-400 — light blue
+        paul:  '#65A30D',    // lime-600 — olive green
       },
       fontFamily: {
         sans: ['Poppins', 'sans-serif'],

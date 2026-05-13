@@ -153,7 +153,7 @@ function SingleInput({ sectionCode, currentUser, onBack, onAdded, onSwitchBatch 
               className={cn('px-5 py-2 rounded-full font-semibold text-sm transition-all',
                 owner === u ? u === 'Simon' ? 'bg-simon text-white' : 'bg-paul text-white'
                   : 'bg-gray-100 text-gray-500')}>
-              {u === 'Simon' ? '🟦' : '🟧'} {u}
+              {u === 'Simon' ? '🟦' : '🟩'} {u}
             </button>
           ))}
         </div>
@@ -263,7 +263,7 @@ function BatchGrid({ sectionCode, currentUser, onBack, onAdded, onSwitchSingle }
               className={cn('px-3 py-1 rounded-full font-semibold text-xs transition-all',
                 owner === u ? u === 'Simon' ? 'bg-simon text-white' : 'bg-paul text-white'
                   : 'bg-gray-100 text-gray-500')}>
-              {u === 'Simon' ? '🟦' : '🟧'} {u}
+              {u === 'Simon' ? '🟦' : '🟩'} {u}
             </button>
           ))}
         </div>

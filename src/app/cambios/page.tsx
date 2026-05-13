@@ -130,22 +130,31 @@ function Transferencias() {
     <div className="flex flex-col h-full">
       {/* From/To selector */}
       <div className="bg-white border-b border-gray-100 px-4 py-3">
-        <p className="text-xs text-gray-400 mb-2 font-medium">Transferir monas de:</p>
         <div className="flex items-center gap-3">
-          <button onClick={() => { setFromUser('Simon'); setSelected(new Set()) }}
-            className={cn('flex-1 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95',
-              fromUser === 'Simon' ? 'bg-simon text-white' : 'bg-gray-100 text-gray-500')}>
-            🟦 Simon
-          </button>
-          <span className="text-gray-300 font-bold text-xl">→</span>
-          <div className={cn('flex-1 py-2.5 rounded-xl font-bold text-sm text-center',
-            toUser === 'Paul' ? 'bg-paul/20 text-paul border-2 border-paul/30' : 'bg-simon/20 text-simon border-2 border-simon/30')}>
-            {toUser === 'Paul' ? '🟧 Paul' : '🟦 Simon'}
+          <div className="flex-1">
+            <p className="text-[10px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">De (entrega)</p>
+            <div className="flex gap-2">
+              {(['Simon', 'Paul'] as Owner[]).map(u => (
+                <button key={u} onClick={() => { setFromUser(u); setSelected(new Set()) }}
+                  className={cn('flex-1 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95',
+                    fromUser === u
+                      ? u === 'Simon' ? 'bg-simon text-white' : 'bg-paul text-white'
+                      : 'bg-gray-100 text-gray-500')}>
+                  {u === 'Simon' ? '🟦' : '🟩'} {u}
+                </button>
+              ))}
+            </div>
           </div>
-          <button onClick={() => { setFromUser(toUser); setSelected(new Set()) }}
-            className="text-xs text-primary font-bold bg-primary/10 px-3 py-2.5 rounded-xl active:bg-primary/20 whitespace-nowrap">
-            ⇄ Invertir
-          </button>
+          <div className="text-gray-300 font-bold text-2xl pt-4">→</div>
+          <div className="flex-1">
+            <p className="text-[10px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Para (recibe)</p>
+            <div className={cn('py-2.5 rounded-xl font-bold text-sm text-center border-2',
+              toUser === 'Simon'
+                ? 'border-simon/40 bg-simon/10 text-simon'
+                : 'border-paul/40 bg-paul/10 text-paul')}>
+              {toUser === 'Simon' ? '🟦 Simon' : '🟩 Paul'}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -328,7 +337,7 @@ function buildTradeStructure(
 // Reason labels
 const REASON_LABEL: Record<string, string> = {
   repetida: '🔄 Repetida',
-  paul_deck: '🟧 Mazo Paul',
+  paul_deck: '🟩 Mazo Paul',
   principal_done: '🅐 Principal ✓',
 }
 
@@ -686,7 +695,7 @@ export default function CambiosPage() {
           <h1 className="text-white font-bold text-lg pt-4 pb-2">Cambios</h1>
           <div className="flex">
             {[
-              { key: 'transferencias', label: '⇄ Entre Simon y Paul' },
+              { key: 'transferencias', label: '⇄ Internas' },
               { key: 'intercambios',   label: '🤝 Con otras personas' },
             ].map(({ key, label }) => (
               <button key={key} onClick={() => setTab(key as typeof tab)}

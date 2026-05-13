@@ -107,7 +107,7 @@ export default function SettingsPage() {
                       : 'bg-gray-100 text-gray-600'
                   )}
                 >
-                  {u === 'Simon' ? '🟦' : '🟧'} {u}
+                  {u === 'Simon' ? '🟦' : '🟩'} {u}
                 </button>
               ))}
             </div>

@@ -79,7 +79,7 @@ export function PasscodeGate() {
             className="w-full bg-paul text-white font-bold text-xl rounded-2xl py-5
                        active:scale-95 transition-transform duration-100 shadow-lg"
           >
-            🟧 Paul
+            🟩 Paul
           </button>
         </div>
       </div>

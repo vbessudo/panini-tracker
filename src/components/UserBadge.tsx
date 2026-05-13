@@ -5,7 +5,7 @@ import type { Owner } from '@/lib/supabase'
 
 const USER_CONFIG: Record<Owner, { emoji: string; color: string; label: string }> = {
   Simon: { emoji: '🟦', color: 'bg-simon', label: 'Simon' },
-  Paul:  { emoji: '🟧', color: 'bg-paul',  label: 'Paul'  },
+  Paul:  { emoji: '🟩', color: 'bg-paul',  label: 'Paul'  },
 }
 
 interface UserBadgeProps {
@@ -72,7 +72,7 @@ export function UserSwitcherSheet({
                 ${currentUser === user ? 'ring-4 ring-offset-2 ring-gray-300' : ''}
               `}
             >
-              {user === 'Simon' ? '🟦' : '🟧'} {user}
+              {user === 'Simon' ? '🟦' : '🟩'} {user}
               {currentUser === user && <span className="text-sm opacity-80 ml-1">(activo)</span>}
             </button>
           ))}
