@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { SECTIONS } from '@/data/panini-stickers'
 import { AppShell } from '@/components/AppShell'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -219,7 +220,7 @@ export default function MazoPage() {
     r.stickers?.section_label?.toLowerCase().includes(search.toLowerCase())
   )
 
-  // Group by section
+  // Group by section, respecting canonical album order
   const groupBySection = (rows: InvRow[]) => {
     const grouped: Record<string, InvRow[]> = {}
     rows.forEach(r => {
@@ -227,7 +228,15 @@ export default function MazoPage() {
       if (!grouped[sec]) grouped[sec] = []
       grouped[sec].push(r)
     })
-    return grouped
+    // Sort sections by canonical order from SECTIONS, unknown sections go last
+    const sectionOrder = SECTIONS.map(s => s.code)
+    return Object.fromEntries(
+      Object.entries(grouped).sort(([a], [b]) => {
+        const ai = sectionOrder.indexOf(a)
+        const bi = sectionOrder.indexOf(b)
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+      })
+    )
   }
 
   // Group for pasting by owner
@@ -277,50 +286,68 @@ export default function MazoPage() {
                     <>
                       {simonPasting.length > 0 && (
                         <div>
-                          <p className="text-xs font-bold text-simon uppercase tracking-widest mb-2">🟦 Simon</p>
-                          <div className="space-y-1.5">
-                            {simonPasting.map(r => (
-                              <button
-                                key={r.id}
-                                onClick={() => setSelectedInv(r)}
-                                className="w-full card flex items-center justify-between py-3 active:bg-gray-50"
-                              >
-                                <div>
-                                  <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
-                                  <span className="text-xs text-gray-400 ml-2">{r.stickers?.display_name}</span>
+                          <p className="text-xs font-bold text-simon uppercase tracking-widest mb-3">
+                            🟦 Simon · {simonPasting.length} mona{simonPasting.length > 1 ? 's' : ''}
+                          </p>
+                          <div className="space-y-3">
+                            {Object.entries(groupBySection(simonPasting)).map(([sec, rows]) => (
+                              <div key={sec}>
+                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                                  <span>{rows[0]?.stickers?.section_label ?? sec}</span>
+                                  <span className="bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 normal-case font-semibold">{rows.length}</span>
+                                </p>
+                                <div className="space-y-1">
+                                  {rows.map(r => (
+                                    <button key={r.id} onClick={() => setSelectedInv(r)}
+                                      className="w-full card flex items-center justify-between py-2.5 active:bg-gray-50">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
+                                        <span className="text-xs text-gray-400 truncate max-w-[140px]">{r.stickers?.display_name}</span>
+                                      </div>
+                                      <span className={cn(
+                                        'text-xs font-bold px-2 py-0.5 rounded-full shrink-0',
+                                        r.assignment === 'Principal' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
+                                      )}>
+                                        {r.assignment === 'Principal' ? '🅐' : '🅑'}
+                                      </span>
+                                    </button>
+                                  ))}
                                 </div>
-                                <span className={cn(
-                                  'text-xs font-bold px-2 py-0.5 rounded-full',
-                                  r.assignment === 'Principal' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
-                                )}>
-                                  {r.assignment === 'Principal' ? '🅐' : '🅑'} {r.assignment}
-                                </span>
-                              </button>
+                              </div>
                             ))}
                           </div>
                         </div>
                       )}
                       {paulPasting.length > 0 && (
                         <div>
-                          <p className="text-xs font-bold text-paul uppercase tracking-widest mb-2">🟧 Paul</p>
-                          <div className="space-y-1.5">
-                            {paulPasting.map(r => (
-                              <button
-                                key={r.id}
-                                onClick={() => setSelectedInv(r)}
-                                className="w-full card flex items-center justify-between py-3 active:bg-gray-50"
-                              >
-                                <div>
-                                  <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
-                                  <span className="text-xs text-gray-400 ml-2">{r.stickers?.display_name}</span>
+                          <p className="text-xs font-bold text-paul uppercase tracking-widest mb-3">
+                            🟧 Paul · {paulPasting.length} mona{paulPasting.length > 1 ? 's' : ''}
+                          </p>
+                          <div className="space-y-3">
+                            {Object.entries(groupBySection(paulPasting)).map(([sec, rows]) => (
+                              <div key={sec}>
+                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                                  <span>{rows[0]?.stickers?.section_label ?? sec}</span>
+                                  <span className="bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 normal-case font-semibold">{rows.length}</span>
+                                </p>
+                                <div className="space-y-1">
+                                  {rows.map(r => (
+                                    <button key={r.id} onClick={() => setSelectedInv(r)}
+                                      className="w-full card flex items-center justify-between py-2.5 active:bg-gray-50">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono font-bold text-sm text-gray-800">{r.sticker_code}</span>
+                                        <span className="text-xs text-gray-400 truncate max-w-[140px]">{r.stickers?.display_name}</span>
+                                      </div>
+                                      <span className={cn(
+                                        'text-xs font-bold px-2 py-0.5 rounded-full shrink-0',
+                                        r.assignment === 'Principal' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
+                                      )}>
+                                        {r.assignment === 'Principal' ? '🅐' : '🅑'}
+                                      </span>
+                                    </button>
+                                  ))}
                                 </div>
-                                <span className={cn(
-                                  'text-xs font-bold px-2 py-0.5 rounded-full',
-                                  r.assignment === 'Principal' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
-                                )}>
-                                  {r.assignment === 'Principal' ? '🅐' : '🅑'} {r.assignment}
-                                </span>
-                              </button>
+                              </div>
                             ))}
                           </div>
                         </div>
