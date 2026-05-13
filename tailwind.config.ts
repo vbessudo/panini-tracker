@@ -15,13 +15,16 @@ const config: Config = {
           light: '#5e2150',
         },
         accent: '#65163D',
+        rose:   '#953A67',
+        blush:  '#DDC6D0',
+        blushLight: '#EAD1DC',
         // Semantic states
-        pegada: '#16A34A',   // green-600
-        tengo: '#D97706',    // amber-600
-        falta: '#9CA3AF',    // gray-400
+        pegada: '#16A34A',
+        tengo:  '#D97706',
+        falta:  '#9CA3AF',
         // Owner colors
-        simon: '#60A5FA',    // blue-400 — light blue
-        paul:  '#65A30D',    // lime-600 — olive green
+        simon: '#60A5FA',
+        paul:  '#65A30D',
       },
       fontFamily: {
         sans: ['Poppins', 'sans-serif'],

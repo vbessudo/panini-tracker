@@ -82,7 +82,7 @@ export default function InicioInner() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top bar */}
-      <header className="bg-primary px-4 pt-safe-top pb-4 flex items-center justify-between">
+      <header className="bg-primary px-4 pt-safe pb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-white font-bold text-lg">⚽ Panini 2026</span>
         </div>

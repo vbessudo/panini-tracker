@@ -269,7 +269,7 @@ export default function AlbumPage() {
   return (
     <AppShell>
       <div className="min-h-screen bg-gray-50">
-        <header className="bg-primary px-4 pt-safe-top pb-0">
+        <header className="bg-primary px-4 pt-safe pb-0">
           <div className="flex items-center justify-between pt-4 pb-2">
             <h1 className="text-white font-bold text-lg">Álbum</h1>
             <GroupingToggle />

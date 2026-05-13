@@ -49,21 +49,24 @@ function SectionPicker({ onPick }: { onPick: (code: string) => void }) {
   const groups = buildSectionGroups(groupingMode)
 
   return (
-    <div className="px-4 py-4 space-y-5">
+    <div className="px-4 py-4 space-y-6">
       {groups.map(({ groupId, groupLabel, sections }) => (
         <div key={groupId}>
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{groupLabel}</p>
-          <div className="space-y-1">
+          <p className="group-header">{groupLabel}</p>
+          <div className="space-y-1.5">
             {sections.map((s) => (
               <button key={s.code} onClick={() => onPick(s.code)}
-                className="w-full flex items-center justify-between bg-white rounded-xl px-4 py-3
-                           border border-gray-100 active:bg-primary/5 transition-colors">
+                className="w-full flex items-center justify-between bg-white rounded-2xl px-4 py-3
+                           border border-[#EEEEEE] active:bg-blushLight/60 active:border-blush
+                           transition-colors shadow-sm">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-mono font-bold text-gray-400 w-8">{s.code}</span>
-                  <span className="text-sm font-medium text-gray-800">{s.label}</span>
-                  {s.code === 'COC' && <span className="text-amber-500">⭐</span>}
+                  <span className="text-[11px] font-bold bg-blushLight text-accent px-2 py-0.5 rounded-lg font-mono">
+                    {s.code}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-800">{s.label}</span>
+                  {s.code === 'COC' && <span className="text-amber-500 text-xs">⭐</span>}
                 </div>
-                <span className="text-xs text-gray-400">›</span>
+                <span className="text-rose font-bold text-sm">›</span>
               </button>
             ))}
           </div>
@@ -334,7 +337,7 @@ export default function AgregarPage() {
       <div className="min-h-screen bg-gray-50 flex flex-col">
         {!selectedSection ? (
           <>
-            <header className="bg-primary px-4 pt-safe-top pb-4">
+            <header className="bg-primary px-4 pt-safe pb-4">
               <div className="flex items-center justify-between mb-1">
                 <h1 className="text-white font-bold text-lg">Agregar monas</h1>
                 <GroupingToggle />
