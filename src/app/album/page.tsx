@@ -326,7 +326,7 @@ export default function AlbumPage() {
                               </span>
                             </div>
                             <ProgressBar value={prog.pegada} max={prog.total}
-                              color={complete ? '#16A34A' : '#4A1A3B'} />
+                              color={complete ? '#16A34A' : '#953A67'} />
                           </button>
                         )
                       })}

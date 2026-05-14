@@ -37,7 +37,10 @@
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
   /* Safe area helpers */
-  .pt-safe { padding-top: env(safe-area-inset-top, 12px); }
+  .pt-safe {
+    /* safe area (Dynamic Island / notch) + 16px content breathing room */
+    padding-top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  }
   .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 }
 
