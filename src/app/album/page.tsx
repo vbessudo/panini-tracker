@@ -269,21 +269,23 @@ export default function AlbumPage() {
   return (
     <AppShell>
       <div className="min-h-screen bg-gray-50">
-        <header className="bg-primary px-4 pt-safe pb-0">
-          <div className="flex items-center justify-between pt-4 pb-2">
+        <header className="bg-primary pt-safe px-4 pb-4">
+          <div className="flex items-center justify-between">
             <h1 className="text-white font-bold text-lg">Álbum</h1>
             <GroupingToggle />
           </div>
-          <div className="flex">
-            {(['Principal','Secundario'] as Album[]).map(a => (
-              <button key={a} onClick={() => { setAlbum(a); setSelectedSection(null) }}
-                className={cn('flex-1 py-3 text-sm font-semibold border-b-2 transition-colors',
-                  album === a ? 'text-white border-white' : 'text-white/50 border-transparent')}>
-                {a === 'Principal' ? '🅐 Principal' : '🅑 Secundario'}
-              </button>
-            ))}
-          </div>
         </header>
+
+        {/* Tab bar — separate from primary header */}
+        <div className="bg-white border-b border-[#EEEEEE] flex sticky top-0 z-20 shadow-sm">
+          {(['Principal','Secundario'] as Album[]).map(a => (
+            <button key={a} onClick={() => { setAlbum(a); setSelectedSection(null) }}
+              className={cn('flex-1 py-3 text-sm font-semibold border-b-2 transition-colors',
+                album === a ? 'text-accent border-accent' : 'text-gray-400 border-transparent')}>
+              {a === 'Principal' ? '🅐 Principal' : '🅑 Secundario'}
+            </button>
+          ))}
+        </div>
 
         {selectedSection ? (
           <SectionGrid

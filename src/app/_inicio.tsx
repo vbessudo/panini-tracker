@@ -82,15 +82,15 @@ export default function InicioInner() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top bar */}
-      <header className="bg-primary px-4 pt-safe pb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <header className="bg-primary pt-safe px-4 pb-4">
+        <div className="flex items-center justify-between">
           <span className="text-white font-bold text-lg">⚽ Panini 2026</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <UserBadge onSwitchRequest={() => setShowSwitcher(true)} />
-          <Link href="/settings" className="text-white/70 active:text-white transition-colors p-1">
-            <Settings size={20} />
-          </Link>
+          <div className="flex items-center gap-2">
+            <UserBadge onSwitchRequest={() => setShowSwitcher(true)} />
+            <Link href="/settings" className="text-white/70 active:text-white transition-colors p-1">
+              <Settings size={20} />
+            </Link>
+          </div>
         </div>
       </header>
 

@@ -337,7 +337,7 @@ export default function AgregarPage() {
       <div className="min-h-screen bg-gray-50 flex flex-col">
         {!selectedSection ? (
           <>
-            <header className="bg-primary px-4 pt-safe pb-4">
+            <header className="bg-primary pt-safe px-4 pb-4">
               <div className="flex items-center justify-between mb-1">
                 <h1 className="text-white font-bold text-lg">Agregar monas</h1>
                 <GroupingToggle />

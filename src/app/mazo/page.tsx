@@ -74,7 +74,8 @@ function useFaltaSlots() {
       const [slotsRes, invRes] = await Promise.all([
         supabase.from('album_slots')
           .select('sticker_code, album, stickers(section, section_label, display_name, number, is_foil, is_bonus)')
-          .eq('status', 'Falta'),
+          .eq('status', 'Falta')
+          .limit(2000),   // ← Supabase default is 1000; we have up to 1984 falta rows
         supabase.from('inventory').select('sticker_code, assignment'),
       ])
       if (slotsRes.error) throw slotsRes.error
@@ -441,7 +442,7 @@ function FaltaTab({ groupingMode }: { groupingMode: import('@/lib/grouping').Gro
   return (
     <div className="flex flex-col h-full">
       {/* Album sub-tabs */}
-      <div className="flex border-b border-[#EEEEEE] bg-white">
+      <div className="bg-white border-b border-[#EEEEEE] flex">
         {(['Principal', 'Secundario'] as Album[]).map(a => {
           const count = faltaSlots.filter(s => s.album === a).length
           return (
@@ -557,21 +558,23 @@ export default function MazoPage() {
   return (
     <AppShell>
       <div className="min-h-screen bg-[#F9F9F9] flex flex-col">
-        <header className="bg-primary pt-safe px-4 pb-0">
-          <div className="flex items-center justify-between py-3">
+        <header className="bg-primary pt-safe px-4 pb-4">
+          <div className="flex items-center justify-between">
             <h1 className="text-white font-bold text-lg">Mazo</h1>
             <GroupingToggle />
           </div>
-          <div className="flex overflow-x-auto scrollbar-hide gap-0">
-            {tabConfig.map(({ key, label }) => (
-              <button key={key} onClick={() => setTab(key)}
-                className={cn('shrink-0 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
-                  tab === key ? 'text-white border-white' : 'text-white/50 border-transparent')}>
-                {label}
-              </button>
-            ))}
-          </div>
         </header>
+
+        {/* Tab bar — separate from primary header */}
+        <div className="bg-white border-b border-[#EEEEEE] flex overflow-x-auto scrollbar-hide sticky top-0 z-20 shadow-sm">
+          {tabConfig.map(({ key, label }) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={cn('shrink-0 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
+                tab === key ? 'text-accent border-accent' : 'text-gray-400 border-transparent')}>
+              {label}
+            </button>
+          ))}
+        </div>
 
         <div className="flex-1 overflow-hidden flex flex-col">
           {tab === 'mia' && (

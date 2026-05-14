@@ -131,7 +131,7 @@ export default function AyudaPage() {
   return (
     <AppShell>
       <div className="min-h-screen bg-gray-50">
-        <header className="bg-primary px-4 pt-safe pb-4 flex items-center gap-3">
+        <header className="bg-primary pt-safe px-4 pb-4 flex items-center gap-3">
           <Link href="/settings" className="text-white/70 active:text-white">
             <ChevronLeft size={22} />
           </Link>

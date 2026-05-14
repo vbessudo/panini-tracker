@@ -746,24 +746,26 @@ export default function CambiosPage() {
   return (
     <AppShell>
       <div className="min-h-screen bg-gray-50 flex flex-col">
-        <header className="bg-primary px-4 pt-safe pb-0">
-          <div className="flex items-center justify-between pt-4 pb-2">
+        <header className="bg-primary pt-safe px-4 pb-4">
+          <div className="flex items-center justify-between">
             <h1 className="text-white font-bold text-lg">Cambios</h1>
             <GroupingToggle />
           </div>
-          <div className="flex">
-            {[
-              { key: 'transferencias', label: '⇄ Internas' },
-              { key: 'intercambios',   label: '🤝 Con otras personas' },
-            ].map(({ key, label }) => (
-              <button key={key} onClick={() => setTab(key as typeof tab)}
-                className={cn('flex-1 py-3 text-xs font-semibold border-b-2 transition-colors',
-                  tab === key ? 'text-white border-white' : 'text-white/50 border-transparent')}>
-                {label}
-              </button>
-            ))}
-          </div>
         </header>
+
+        {/* Tab bar — separate from primary header */}
+        <div className="bg-white border-b border-[#EEEEEE] flex sticky top-0 z-20 shadow-sm">
+          {[
+            { key: 'transferencias', label: '⇄ Internas' },
+            { key: 'intercambios',   label: '🤝 Con otras personas' },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setTab(key as typeof tab)}
+              className={cn('flex-1 py-3 text-xs font-semibold border-b-2 transition-colors',
+                tab === key ? 'text-accent border-accent' : 'text-gray-400 border-transparent')}>
+              {label}
+            </button>
+          ))}
+        </div>
 
         <div className="flex-1 overflow-hidden flex flex-col">
           {tab === 'transferencias' ? <Transferencias /> : <Intercambios />}
