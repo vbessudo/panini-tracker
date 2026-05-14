@@ -45,18 +45,18 @@ function useAlbumSlots(album: Album) {
   return query
 }
 
-// Returns map: sticker_code → owners who have it reserved for this album
-function useInventoryForSection(sectionCodes: string[], album: Album) {
+// Returns map: sticker_code → owners who have it in their deck (any earmark)
+function useInventoryForSection(sectionCodes: string[]) {
   const qc = useQueryClient()
   const query = useQuery({
-    queryKey: ['inv-section', sectionCodes.join(','), album],
+    queryKey: ['inv-section', sectionCodes.join(',')],
     queryFn: async () => {
       if (!sectionCodes.length) return {}
       const { data } = await supabase
         .from('inventory')
         .select('sticker_code, owner')
         .in('sticker_code', sectionCodes)
-        .eq('assignment', album)
+        // No assignment filter — a mona in anyone's deck lights up the cell
       const map: Record<string, Owner[]> = {}
       data?.forEach(r => {
         if (!map[r.sticker_code]) map[r.sticker_code] = []
@@ -67,12 +67,12 @@ function useInventoryForSection(sectionCodes: string[], album: Album) {
     enabled: sectionCodes.length > 0,
   })
   useEffect(() => {
-    const ch = supabase.channel(`inv-section-${album}`)
+    const ch = supabase.channel('inv-section-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
         qc.invalidateQueries({ queryKey: ['inv-section'] })
       }).subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [album, qc])
+  }, [qc])
   return query
 }
 
@@ -95,7 +95,14 @@ function CellSheet({ slot, onClose }: { slot: SlotRow; onClose: () => void }) {
   const { currentUser } = useAppStore()
   const qc = useQueryClient()
   const { data: inventory } = useInventoryForSlot(slot.sticker_code)
-  const relevantInv = inventory?.filter(r => r.assignment === slot.album) ?? []
+  // Show ALL copies from anyone's deck — assignment is just an earmark, not a filter
+  const deckCopies = inventory ?? []
+
+  const earmarkLabel = (assignment: string) => {
+    if (assignment === 'Principal')  return '🅐 sugerida para Principal'
+    if (assignment === 'Secundario') return '🅑 sugerida para Secundario'
+    return '🔄 marcada como repetida'
+  }
 
   const handlePaste = async (invId: string) => {
     const { error } = await supabase.from('album_slots')
@@ -139,22 +146,30 @@ function CellSheet({ slot, onClose }: { slot: SlotRow; onClose: () => void }) {
           <button onClick={onClose} className="text-gray-400 active:text-gray-700 p-1"><X size={20} /></button>
         </div>
 
-        {slot.status === 'Falta' && relevantInv.length === 0 && (
+        {slot.status === 'Falta' && deckCopies.length === 0 && (
           <div className="space-y-2">
             <span className="chip-falta">Falta</span>
-            <p className="text-sm text-gray-500 mt-2">Todavía no tienes esta mona.</p>
+            <p className="text-sm text-gray-500 mt-2">Nadie tiene esta mona en el mazo.</p>
           </div>
         )}
 
-        {slot.status === 'Falta' && relevantInv.length > 0 && (
+        {slot.status === 'Falta' && deckCopies.length > 0 && (
           <div className="space-y-3">
-            <span className="chip-tengo">Tengo (sin pegar)</span>
-            {relevantInv.map((inv: { id: string; owner: Owner }) => (
-              <div key={inv.id} className="flex items-center justify-between mt-2">
-                <p className="text-sm text-gray-600">
-                  <span className={cn('font-semibold', inv.owner === 'Simon' ? 'text-simon' : 'text-paul')}>{inv.owner}</span>{' '}tiene una copia
-                </p>
-                <button onClick={() => handlePaste(inv.id)} className="btn-primary text-sm py-2 px-4">Pegar ✓</button>
+            <span className="chip-tengo">En el mazo — lista para pegar</span>
+            {deckCopies.map((inv: { id: string; owner: Owner; assignment: string }) => (
+              <div key={inv.id}
+                className="flex items-center justify-between bg-blushLight/30 rounded-xl px-3 py-2.5 mt-2">
+                <div>
+                  <p className="text-sm font-semibold">
+                    <span className={inv.owner === 'Simon' ? 'text-simon' : 'text-paul'}>
+                      {inv.owner === 'Simon' ? '🟦' : '🟩'} {inv.owner}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">{earmarkLabel(inv.assignment)}</p>
+                </div>
+                <button onClick={() => handlePaste(inv.id)} className="btn-primary text-sm py-2 px-4">
+                  Pegar ✓
+                </button>
               </div>
             ))}
           </div>
@@ -192,7 +207,7 @@ function SectionGrid({ sectionCode, album, slots, onBack }: {
     .sort((a, b) => a.stickers.number - b.stickers.number)
 
   const sectionCodes = sectionSlots.map(s => s.sticker_code)
-  const { data: invMap = {} } = useInventoryForSection(sectionCodes, album)
+  const { data: invMap = {} } = useInventoryForSection(sectionCodes)
 
   const section = SECTIONS.find(s => s.code === sectionCode)
 

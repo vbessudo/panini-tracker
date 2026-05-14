@@ -183,30 +183,33 @@ function ActionSheet({ entry, slots, onClose }: {
   const qc = useQueryClient()
   const actor = currentUser!
 
-  const pasteRow = async (row: InvRow) => {
+  // Paste into a SPECIFIC album — independent of which album the mona is earmarked for
+  const pasteToAlbum = async (row: InvRow, album: 'Principal' | 'Secundario') => {
     const { error } = await supabase.from('album_slots')
       .update({ status: 'Pegada', pegada_at: new Date().toISOString(), pegada_by: actor })
-      .eq('sticker_code', row.sticker_code).eq('album', row.assignment)
+      .eq('sticker_code', row.sticker_code).eq('album', album)
     if (error) { toast.error('Error al pegar'); return }
     await supabase.from('inventory').delete().eq('id', row.id)
     await supabase.from('events').insert({ actor, kind: 'paste',
-      payload: { code: row.sticker_code, album: row.assignment, actor } })
+      payload: { code: row.sticker_code, album, actor } })
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
-    toast.success(`✅ ${row.sticker_code} pegada en ${row.assignment}`)
+    toast.success(`✅ ${row.sticker_code} pegada en ${album}`)
     qc.invalidateQueries({ queryKey: ['inventory-mazo'] })
     qc.invalidateQueries({ queryKey: ['album-slots'] })
     qc.invalidateQueries({ queryKey: ['album-stats'] })
     qc.invalidateQueries({ queryKey: ['falta-slots'] })
+    qc.invalidateQueries({ queryKey: ['inv-section'] })
     onClose()
   }
 
-  const moveRow = async (row: InvRow, newAssignment: Assignment) => {
+  // Earmark (label) — does NOT paste, just updates the suggested destination
+  const earmarkRow = async (row: InvRow, newAssignment: Assignment) => {
     await supabase.from('inventory').update({ assignment: newAssignment }).eq('id', row.id)
     await supabase.from('events').insert({ actor, kind: 'move',
       payload: { code: row.sticker_code, from: row.assignment, to: newAssignment, actor } })
-    toast(`↕ ${row.sticker_code} → ${newAssignment}`)
+    const label = newAssignment === 'Principal' ? 'Principal' : newAssignment === 'Secundario' ? 'Secundario' : 'Repetidas'
+    toast(`🏷 ${row.sticker_code} etiquetada para ${label}`)
     qc.invalidateQueries({ queryKey: ['inventory-mazo'] })
-    qc.invalidateQueries({ queryKey: ['album-stats'] })
     onClose()
   }
 
@@ -220,6 +223,9 @@ function ActionSheet({ entry, slots, onClose }: {
     onClose()
   }
 
+  const principalOpen  = slots[`${entry.sticker_code}-Principal`]  !== 'Pegada'
+  const secundarioOpen = slots[`${entry.sticker_code}-Secundario`] !== 'Pegada'
+
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
       <div className="w-full bg-white rounded-t-3xl p-6 shadow-2xl max-w-lg mx-auto" onClick={e => e.stopPropagation()}>
@@ -229,39 +235,54 @@ function ActionSheet({ entry, slots, onClose }: {
         </p>
         <p className="text-sm text-gray-400 mb-1">{entry.display_name}</p>
         {entry.count > 1 && (
-          <p className="text-xs font-semibold text-rose mb-4">{entry.count} copias disponibles</p>
+          <p className="text-xs font-semibold text-rose mb-4">{entry.count} copias en el mazo</p>
         )}
         <div className="space-y-2">
           {entry.rows.map((row, i) => (
             <div key={row.id}>
               {entry.rows.length > 1 && (
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1.5">
-                  Copia {i + 1} — {row.assignment} · {row.owner}
+                  Copia {i + 1} · {row.owner === 'Simon' ? '🟦' : '🟩'} {row.owner}
+                  {row.assignment !== 'Repetida' && (
+                    <span className="ml-1 text-rose">· etiquetada {row.assignment}</span>
+                  )}
                 </p>
               )}
               <div className="space-y-1.5">
-                {(row.assignment === 'Principal' || row.assignment === 'Secundario') && (
-                  <button onClick={() => pasteRow(row)}
+                {/* PASTE — based on which album slots are open, not on earmark */}
+                {principalOpen && (
+                  <button onClick={() => pasteToAlbum(row, 'Principal')}
                     className="w-full bg-pegada text-white font-semibold rounded-xl py-3 active:scale-95 transition-transform text-sm">
-                    ✅ Pegar en {row.assignment}
+                    ✅ Pegar en Principal
                   </button>
                 )}
-                {row.assignment !== 'Principal' && slots[`${row.sticker_code}-Principal`] !== 'Pegada' && (
-                  <button onClick={() => moveRow(row, 'Principal')}
-                    className="w-full bg-blushLight text-accent font-semibold rounded-xl py-2.5 active:scale-95 transition-transform text-sm">
-                    🅐 Mover a Principal
+                {secundarioOpen && (
+                  <button onClick={() => pasteToAlbum(row, 'Secundario')}
+                    className="w-full bg-pegada/80 text-white font-semibold rounded-xl py-3 active:scale-95 transition-transform text-sm">
+                    ✅ Pegar en Secundario
                   </button>
                 )}
-                {row.assignment !== 'Secundario' && slots[`${row.sticker_code}-Secundario`] !== 'Pegada' && (
-                  <button onClick={() => moveRow(row, 'Secundario')}
+
+                {/* EARMARK — just changes the label, doesn't paste */}
+                {(principalOpen || secundarioOpen) && (
+                  <p className="text-[10px] text-gray-400 uppercase tracking-widest pt-1">Etiquetar como →</p>
+                )}
+                {row.assignment !== 'Principal' && principalOpen && (
+                  <button onClick={() => earmarkRow(row, 'Principal')}
                     className="w-full bg-blushLight text-accent font-semibold rounded-xl py-2.5 active:scale-95 transition-transform text-sm">
-                    🅑 Mover a Secundario
+                    🅐 Etiquetar para Principal
+                  </button>
+                )}
+                {row.assignment !== 'Secundario' && secundarioOpen && (
+                  <button onClick={() => earmarkRow(row, 'Secundario')}
+                    className="w-full bg-blushLight text-accent font-semibold rounded-xl py-2.5 active:scale-95 transition-transform text-sm">
+                    🅑 Etiquetar para Secundario
                   </button>
                 )}
                 {row.assignment !== 'Repetida' && (
-                  <button onClick={() => moveRow(row, 'Repetida')}
+                  <button onClick={() => earmarkRow(row, 'Repetida')}
                     className="w-full bg-[#EEEEEE] text-gray-700 font-semibold rounded-xl py-2.5 active:scale-95 transition-transform text-sm">
-                    🔄 Mover a Repetidas
+                    🔄 Etiquetar como repetida
                   </button>
                 )}
                 <button onClick={() => tradeRow(row)}
